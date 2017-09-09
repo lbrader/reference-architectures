@@ -1,0 +1,15 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vmName": {
+      "value": "test-vm-joara"
+    },
+    "sshKeyData": {
+      "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDbJI/aMhuFVuEhPRJuRqjp1pXSSth691SFvC54HQRv2ESPicEh+dJd42NqiYzg9XzX6wExu7NQdswer2LajzrkeqmzDCdTVqlaXhWcYOFC9UYqQcYdz25/BkZm6QbfKigyoJyuRI5FDZ7kNuSgnxDH9waY25H1n5yKjbjYn4F0cHdBXY4mEg55fJ4rjmSpNHm4L1FzPMi1MkXrH0xRrGTuecNDVa5boTa5wjUdtsl6SoIsvyya8EFVHL5fycCm8MB5OM4RafrP4kt8sybG5o7Bgt4LQIEFXZX3EfLAj2xBAMTzmyRXfj6b1SNQl+FQzCDawNi28wGvD81WQuMdIaR/"
+    },
+    "dnsLabelPrefix": {
+      "value": "testvmjoara"
+    }
+  }
+}

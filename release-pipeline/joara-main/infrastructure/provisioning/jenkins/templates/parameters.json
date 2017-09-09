@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminSSHPublicKey": {
+      "value": "{{ sshkey }}"
+    },
+    "adminUserName": {
+      "value": "joara{{ datacenter }}"
+    },
+    "authenticationType": {
+      "value": "sshPublicKey"
+    },
+    "dnsPrefix": {
+      "value": "joara-release-{{ datacenter }}"
+    },
+    "publicIPName": {
+      "value": "JenkinsIP{{ datacenter }}"
+    },
+    "publicIPNewOrExisting": {
+      "value": "new"
+    },
+    "publicIPResourceGroup": {
+      "value": "joara-{{ datacenter }}"
+    },
+    "storageAccountName": {
+      "value": "joarast{{ datacenter }}"
+    },
+    "storageAccountNewOrExisting": {
+      "value": "new"
+    },
+    "storageAccountType": {
+      "value": "Premium_LRS"
+    },
+    "storageAccountResourceGroup": {
+      "value": "joara-{{ datacenter }}"
+    },
+    "vmName": {
+      "value": "joaracommon{{ datacenter }}"
+    },
+    "vmSize": {
+      "value": "Standard_DS2_v2"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "jenkinsReleaseType": {
+      "value": "LTS"
+    }
+  }
+}

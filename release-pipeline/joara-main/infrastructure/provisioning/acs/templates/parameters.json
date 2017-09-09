@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceName": {
+      "value": "jora-acs-{{ datacenter }}"
+    },
+    "masterDnsNamePrefix": {
+      "value": "jora-acs-mgmt-{{ datacenter }}"
+    },
+    "agentDnsNamePrefix": {
+      "value": "jora-acs-agents-{{ datacenter }}"
+    },
+    "agentCount": {
+      "value": {{ agentcount }}
+    },
+    "agentVMSize": {
+      "value": "Standard_DS2"
+    },
+    "linuxAdminUsername": {
+      "value": "joaraacs{{ datacenter }}"
+    },
+    "orchestratorType": {
+      "value": "Kubernetes"
+    },
+    "masterCount": {
+      "value": 1
+    },
+    "sshRSAPublicKey": {
+      "value": "{{ sshkey }}"
+    },
+    "servicePrincipalClientId": {
+      "value": "{{ client_id }}"
+    },
+    "servicePrincipalClientSecret": {
+      "value": "{{ client_secret }}"
+    },
+    "osType": {
+      "value": "Linux"
+    },
+    "ukRegion": {
+      "value": false
+    }
+  }
+}
