@@ -1,0 +1,33 @@
+---
+
+
+- name: Add Docker repository key
+  apt_key:
+    id: "{{ apt_key_sig }}"
+    keyserver: "{{ apt_key_url }}"
+    state: present
+  register: add_repository_key
+  ignore_errors: true
+
+- name: Alternative | Add Docker repository key
+  shell: "curl -sSL {{ apt_key_url }} | sudo apt-key add -"
+  when: add_repository_key|failed
+
+- name: HTTPS APT transport for Docker repository
+  apt:
+    name: apt-transport-https
+    state: present
+
+- name: Add Docker repository and update apt cache
+  apt_repository:
+    repo: "{{ apt_repository }}"
+    mode: '644'
+    update_cache: yes
+    state: present
+
+- name: Install (or update) docker package
+  apt:
+    name: "{{ docker_pkg_name }}"
+    state: "{{ 'latest' if update_docker_package else 'present' }}"
+    update_cache: "{{ update_docker_package }}"
+    cache_valid_time: "{{ docker_apt_cache_valid_time }}"
