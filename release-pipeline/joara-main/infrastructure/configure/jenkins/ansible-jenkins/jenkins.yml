@@ -1,4 +1,4 @@
 ---
-- hosts: jenkinslocal
+- hosts: jenkins
   roles:
     - jenkins

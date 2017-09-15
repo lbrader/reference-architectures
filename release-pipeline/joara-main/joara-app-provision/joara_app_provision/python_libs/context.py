@@ -44,8 +44,7 @@ class Context(object):
         })
 
         try:
-            if (
-                                    'AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
+            if ('AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
                 self.__dict__.update({
                     'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
                     'client_id': os.environ['AZURE_CLIENT_ID'],
@@ -70,6 +69,9 @@ class Context(object):
         if 'SSH_KEY_FILE' in self.cluster_config:
             self.__dict__.update({
                 'ssh_key_file': "{}{}".format(self.joara_app_main, self.cluster_config['SSH_KEY_FILE'])})
+        else:
+            self.__dict__.update({
+                'ssh_key_file': ""})
 
         self.__dict__.update({
             'resource_group_prefix': self.cluster_config['RESOURCE_GROUP_PREFIX'],
@@ -326,6 +328,19 @@ class Context(object):
         else:
             self.logger.error("No task exist")
 
+    # def _app_project_path(self):
+    #     xs = self.project_path.split(os.sep)
+    #     self.app_project_path = ''
+    #     include = False
+    #     for x in xs:
+    #         if include:
+    #             self.app_project_path = '{}/{}'.format(
+    #                 self.app_project_path, x)
+    #         if x == 'joara-main':
+    #             include = True
+    #     self.app_project_path = '{}{}'.format(
+    #         self.joara_app_main, self.app_project_path)
+
     def _app_project_path(self):
         xs = self.project_path.split(os.sep)
         self.app_project_path = ''
@@ -334,10 +349,17 @@ class Context(object):
             if include:
                 self.app_project_path = '{}/{}'.format(
                     self.app_project_path, x)
-            if x == 'joara-main':
+            if 'joara-main' in x:
                 include = True
-        self.app_project_path = '{}{}'.format(
-            self.joara_app_main, self.app_project_path)
+
+        if self.app_project_path == '' and 'infrastructure' in xs:
+            self.app_project_path = os.sep.join(xs[xs.index('infrastructure'):])
+        else:
+            self.app_project_path = self.app_project_path.lstrip(os.path.sep)
+
+        self.logger.info("project path: {}".format(self.app_project_path))
+        self.app_project_path = os.path.join(self.joara_app_main, self.app_project_path)
+        self.logger.info("Absolute project path: {} ".format(self.app_project_path))
 
     def cd_project(self):
         self.cd(self.app_project_path)
@@ -350,6 +372,8 @@ class Context(object):
     def copy_sub_project(self, sub_project):
         self.cd(os.path.join(self.app_project_path, sub_project))
         temp_dir = self.get_temp_dir()
+        self.logger.info("project path:{}".format(os.path.join(self.app_project_path, sub_project)))
+        self.logger.info("temp path:{}".format(os.path.join(os.path.join(temp_dir, sub_project))))
         self.copy_and_overwrite(os.path.join(self.app_project_path, sub_project), os.path.join(temp_dir, sub_project))
         self.cd(os.path.join(temp_dir, sub_project))
 
@@ -357,6 +381,7 @@ class Context(object):
         self.cd_project()
         temp_dir = self.get_temp_dir()
         self.copy_and_overwrite(os.path.join(self.app_project_path), os.path.join(temp_dir, self.project_name))
+        self.logger.info("project path:{}".format(os.path.join(temp_dir, self.project_name)))
         self.cd(os.path.join(temp_dir, self.project_name))
 
     def copy_and_overwrite(self, from_path, to_path):

@@ -34,11 +34,11 @@ class CopyDocker(object):
 
         try:
             if ( 'AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ) :
-                self.credentials = ServicePrincipalCredentials(
-                    client_id=os.environ['AZURE_CLIENT_ID'],
-                    secret=os.environ['AZURE_CLIENT_SECRET'],
-                    tenant=os.environ['AZURE_TENANT_ID']
-                )
+                self.__dict__.update({
+                    'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
+                    'client_id': os.environ['AZURE_CLIENT_ID'],
+                    'client_secret': os.environ['AZURE_CLIENT_SECRET'],
+                    'tenant_id': os.environ['AZURE_TENANT_ID']})
             else:
                 self.__dict__.update({
                     'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
@@ -52,29 +52,31 @@ class CopyDocker(object):
                 os.environ['AZURE_SUBSCRIPTION_ID'] = self.subscription_id
         except Exception as e:
                 logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, {}".format(e)
-                self.logger.error(logs)
+                self.logger.exception(logs)
                 raise RuntimeError(logs)
 
-        if ('AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
-            storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
-            resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
-            storage_name = "{}{}".format(self.resource_group_prefix, self.datacenter)
-            storage_keys = storage_client.storage_accounts.list_keys(resource_group, storage_name)
-            storage_keys = {v.key_name: v.value for v in storage_keys.keys}
+        self.credentials = ServicePrincipalCredentials(
+            client_id=self.client_id,
+            secret=self.client_secret,
+            tenant=self.tenant_id
+        )
 
-            if storage_keys:
-                os.environ['AZURE_STORAGE_KEY']=  storage_keys['key1']
-                os.environ['AZURE_STORAGE_ACCOUNT'] = storage_name
-                run("az storage container create -n {}".format("imagesversion"))
+        storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
+        resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
+        storage_name = "{}{}".format(self.resource_group_prefix, self.datacenter)
+        storage_keys = storage_client.storage_accounts.list_keys(resource_group, storage_name)
+        storage_keys = {v.key_name: v.value for v in storage_keys.keys}
 
-            run("az login -u {} -p {} --tenant {} --service-principal".format(os.environ['AZURE_CLIENT_ID'], os.environ['AZURE_CLIENT_SECRET'],
-                                                                              os.environ['AZURE_TENANT_ID']))
+        if storage_keys:
+            os.environ['AZURE_STORAGE_KEY']=  storage_keys['key1']
+            os.environ['AZURE_STORAGE_ACCOUNT'] = storage_name
+            run("az storage container create -n {}".format("imagesversion"))
 
-            run("az acr login --name joaraacr{}".format(self.from_datacenter))
-        else:
-            logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, "
-            self.logger.error(logs)
-            raise RuntimeError(logs)
+        run("az login -u {} -p {} --tenant {} --service-principal".format(os.environ['AZURE_CLIENT_ID'], os.environ['AZURE_CLIENT_SECRET'],
+                                                                          os.environ['AZURE_TENANT_ID']))
+
+        run("az acr login --name joaraacr{}".format(self.from_datacenter))
+
 
         try:
             os.makedirs("{user}/.kube".format(user=os.path.expanduser("~")), exist_ok=True)
@@ -101,9 +103,35 @@ class CopyDocker(object):
         self.logger.info('cd {}'.format(directory))
         os.chdir(directory)
 
+    def copyfromstroage(self, datacenter='local'):
+        ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
+        try:
+            if datacenter != 'local' :
+                storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
+                resource_group = "{}-{}".format(self.resource_group_prefix, datacenter)
+                storage_name = "{}{}".format(self.resource_group_prefix, datacenter)
+                storage_keys = storage_client.storage_accounts.list_keys(resource_group, storage_name)
+                storage_keys = {v.key_name: v.value for v in storage_keys.keys}
+                if storage_keys:
+                    self.logger.info("Got storage keys")
+                    os.environ['AZURE_STORAGE_KEY'] = storage_keys['key1']
+                    os.environ['AZURE_STORAGE_ACCOUNT'] = storage_name
+                else:
+                    self.logger.info("Unable to get storage keys")
+                    sys.exit(1)
+                cmd = "az storage blob download --container-name imagesversion --file {}/images_{datacenter}.yml --name images_{datacenter}.yml".format(
+                    ifolderpath, datacenter=datacenter)
+                run(cmd, echo=True)
+        except Exception as err:
+            self.logger.error(
+                "ERROR: unable to down image from storage inventory, {error}".format(error=err))
+            pass
+
     def copy(self):
         # procs = 3
 
+        self.copyfromstroage(self.from_datacenter)
+        self.copyfromstroage(self.datacenter)
         list_image = self.version_manager.get_images_list(datacenter=self.from_datacenter)
 
         # Create a list of jobs and then iterate through
@@ -115,6 +143,7 @@ class CopyDocker(object):
         if self.datacenter != self.from_datacenter:
             # for i in range(0, procs):
             for image_name in list_image:
+
                 image_dic = self.version_manager.get_latest_image_sync_dict(image_name, datacenter=self.from_datacenter)
                 current_dc_image_dic = self.version_manager.get_latest_image_sync_dict(image_name,datacenter=self.datacenter)
 
@@ -124,7 +153,7 @@ class CopyDocker(object):
                 tag = image_dic['version']
                 user = self.attributes['user']
                 if 'not exist' not in tag  and (from_registry != self.registry or user != from_user):
-                    if current_dc_image_dic['version'] != image_dic['version']:
+                    if not current_dc_image_dic or (current_dc_image_dic['version'] != image_dic['version']):
                         process = Process(target=self.syncdocker,
                                           args=(from_registry, from_user, name, tag, return_dict))
                         jobs.append(process)
@@ -195,7 +224,7 @@ class CopyDocker(object):
             currentimagedic['branch'] = localimagedic['branch']
             currentimagedic['commit'] = localimagedic['commit']
             currentimagedic['environment'] = self.attributes['cluster_config']['JOARA_APP_DATACENTER']
-            currentimagedic['comment'] = ''
+            currentimagedic["registry"] = self.attributes['cluster_config']['JOARA_APP_DOCKER_REGISTRY']
             currentimagedic['build_hostname'] = localimagedic['build_hostname']
             currentimagedic['build_ip_address'] = localimagedic['build_ip_address']
             currentimagedic['user'] = self.attributes['user']

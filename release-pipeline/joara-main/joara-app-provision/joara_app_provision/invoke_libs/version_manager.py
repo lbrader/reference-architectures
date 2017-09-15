@@ -57,16 +57,6 @@ class VersionManager(object):
                 yaml.dump(dic, f, default_flow_style=False)
             return dicitem
 
-    def copyfromstroage(self, datacenter='local'):
-        ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
-        fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
-        try:
-            if datacenter != 'local' and strtobool(self.attributes['cluster_config']['JOARA_APP_LATEST']):
-                cmd = "az storage blob download --container-name imagesversion --file {}/images_{datacenter}.yml --name images_{datacenter}.yml".format(
-                    ifolderpath, datacenter=self.datacenter)
-                run(cmd, echo=True)
-        except:
-            pass
 
     def update_images_yaml(self, datacenter='local', **kwdic):
         fname = os.path.join(self.joara_app_main, 'joara-app-provision', 'images.yml')
@@ -89,17 +79,23 @@ class VersionManager(object):
         if datacenter != 'local':
             fnamelatest = os.path.join(self.joara_app_main, 'infrastructure',  'images_version')
             cmd = "az storage blob upload -f {}/images_{datacenter}.yml -c imagesversion -n images_{datacenter}.yml".format(
-                fnamelatest, datacenter=self.datacenter)
+                fnamelatest, datacenter=datacenter)
             run(cmd, echo=True)
+            self.logger.info("Update to images version yml completed for datacenter {datacenter}".format(datacenter=datacenter))
 
     def get_images_list(self, datacenter='local'):
-        print(datacenter)
-        ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
-        fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
-        with open(fnamelatest) as f:
-            dict = yaml.load(f)
-        for key in dict.keys():
-            yield key
+        try:
+            ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
+            fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
+            with open(fnamelatest) as f:
+                dict = yaml.load(f)
+            if dict:
+                for key in dict.keys():
+                    yield key
+        except Exception as err:
+            self.logger.exception(
+                "ERROR: Unable to get image details, {error}".format(error=err))
+            sys.exit(1)
 
     def get_latest_image_sync_dict(self, image, datacenter='local'):
         ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')

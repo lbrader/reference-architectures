@@ -14,7 +14,8 @@ def bootstrap_add_subcommand(parser):
             'acs',
             'vm',
             'storage',
-            'monitor'
+            'monitor',
+            'all'
         ],
         help="Which module to provision, use all to provision everything. "
     )
@@ -31,4 +32,20 @@ def bootstrap_add_subcommand(parser):
 
 
 def bootstrap_subcommand(args):
-    from_base.provision(args)
+    if args.group == "all":
+        groups = ["acs","acr","storage"]
+        for group in groups:
+            args = Attributes(
+                {'group': group, "count": args.count, "datacenter": args.datacenter})
+            from_base.provision(args)
+    else:
+        from_base.provision(args)
+
+
+class Attributes(object):
+    def __init__(self, *initial_data, **kwargs):
+        for dictionary in initial_data:
+            for key in dictionary:
+                setattr(self, key, dictionary[key])
+        for key in kwargs:
+            setattr(self, key, kwargs[key])

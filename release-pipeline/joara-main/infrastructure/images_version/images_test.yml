@@ -1,0 +1,11 @@
+nodejs:
+  branch: Not found
+  build_hostname: joaracommonjenkins
+  build_ip_address: 10.0.0.5
+  comment: ''
+  commit: Not found
+  environment: test
+  image: nodejs
+  registry: joaraacrtest.azurecr.io
+  user: test
+  version: 0.0.27
