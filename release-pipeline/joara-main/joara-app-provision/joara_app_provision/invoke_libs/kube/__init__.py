@@ -52,6 +52,7 @@ class KubeApi(object):
             "env": {},
             "cpu": "250m",
             "limitscpu": "500m",
+            "lbport": kwargs['port'] if 'type' in kwargs and kwargs['type'] == "backend" else 80,
             "replicas": kwargs['count'] if int(kwargs['count']) > 1 else self._getreplica(),
             "name": self.name,
             "registry": kwargs["app_docker_registry"],
@@ -321,7 +322,7 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-  - port: 80
+  - port: {{ lbport }}
     targetPort: {{ port }}
   selector:
     app: {{ name }}

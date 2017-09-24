@@ -47,7 +47,7 @@ class GitHubApi(object):
         self.github = Github(self.token)
 
     def app_render(self):
-        list_files = ['Jenkinsfile','conf.yml']
+        list_files = ['Jenkinsfile','conf.yml','backend.yml']
         for files in list_files:
             self.app_render_template(self.find(files), files)
 
@@ -78,7 +78,7 @@ class GitHubApi(object):
                 repo_exist = True
                 repo_detail = gitrepo
         if not repo_exist:
-            repogit = self.github.get_organization( self.orgid).create_repo(name)
+            repogit = self.github.get_organization( self.orgid).create_repo(name,private=True)
             time.sleep(60)
             repo_exist = True
             repo_detail = repogit
