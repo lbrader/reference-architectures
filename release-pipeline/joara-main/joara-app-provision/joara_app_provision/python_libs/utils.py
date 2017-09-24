@@ -4,18 +4,7 @@ import sys
 import subprocess
 
 
-# def find_joara_app_main():
-#     path = os.getcwd().split(os.sep)
-#     if not any("joara-main" in s for s in path):
-#         raise RuntimeError("Could not find the joara-main directory, please re-run this command in that directory."
-#                            "CWD: " + os.getcwd())
-#
-#     matchpath = [s for s in path if "joara-main" in s]
-#
-#     path = os.sep.join(path[:path.index(str(matchpath[0])) + 1])
-#     return path
-
-def find_joara_app_main():
+def find_app_main():
     """Find the path to the joara-app-main folder
 
     Looks for the folder along the path to the current working directory.
@@ -30,6 +19,6 @@ def find_joara_app_main():
             return path
 
     raise RuntimeError(
-        "Could not find the joara-app-main directory, please re-run this command in that directory."
+        "Could not find the app-main directory, please re-run this command in that directory."
         "CWD: " + os.getcwd()
     )

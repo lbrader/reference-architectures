@@ -1,6 +1,8 @@
 from __future__ import absolute_import, print_function, division
 from ..commands import from_base
-
+from ..log import logging
+from ..invoke_libs import Attributes
+logger = logging.get_logger(__name__)
 
 def bootstrap_add_subcommand(parser):
     subcommand = parser.add_parser('bootstrap')
@@ -32,20 +34,20 @@ def bootstrap_add_subcommand(parser):
 
 
 def bootstrap_subcommand(args):
-    if args.group == "all":
+
+    kube_datacenters = ['dev','test','prod']
+    groups = ['acr', 'acs', 'storage']
+    if args.datacenter in kube_datacenters and  args.group == "all":
         groups = ["acs","acr","storage"]
         for group in groups:
             args = Attributes(
                 {'group': group, "count": args.count, "datacenter": args.datacenter})
             from_base.provision(args)
-    else:
+    elif args.datacenter in kube_datacenters and args.group in groups:
         from_base.provision(args)
+    elif args.datacenter == "jenkins" and args.group == "jenkins":
+        from_base.provision(args)
+    else:
+        logger.warn("Action on datacenter:{datacenter} and group:{group} is not valid".format(datacenter=args.datacenter,group=args.group))
 
 
-class Attributes(object):
-    def __init__(self, *initial_data, **kwargs):
-        for dictionary in initial_data:
-            for key in dictionary:
-                setattr(self, key, dictionary[key])
-        for key in kwargs:
-            setattr(self, key, kwargs[key])

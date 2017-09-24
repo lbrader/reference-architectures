@@ -1,6 +1,6 @@
 from __future__ import absolute_import, print_function, division
 from ..commands import from_base
-from ..python_libs.utils import find_joara_app_main
+from ..python_libs.utils import find_app_main
 import os
 
 
@@ -52,6 +52,6 @@ def sync_subcommand(args):
 
     """
 
-    joara_app_main = find_joara_app_main()
-    run_file = os.path.join(joara_app_main, 'infrastructure', 'sync', 'run')
+    app_main = find_app_main()
+    run_file = os.path.join(app_main, 'infrastructure', 'sync', 'run')
     from_base.sync_version(run_file, args)

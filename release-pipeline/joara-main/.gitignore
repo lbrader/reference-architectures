@@ -23,3 +23,5 @@
 /keys/*
 /id_rsa.pub
 /joara-app-provision/joara_app_provision/python_libs/testgit.py
+/infrastructure/configure/jenkins/ansible-jenkins/roles/jenkins/files/ssh/id_*
+/joara-app-provision/joara_app_provision/python_libs/sample.py

@@ -3,13 +3,13 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "resourceName": {
-      "value": "jora-acs-{{ datacenter }}"
+      "value": "{{ resourcegroup }}-acs-{{ datacenter }}"
     },
     "masterDnsNamePrefix": {
-      "value": "jora-acs-mgmt-{{ datacenter }}"
+      "value": "{{ resourcegroup }}-acs-mgmt-{{ datacenter }}"
     },
     "agentDnsNamePrefix": {
-      "value": "jora-acs-agents-{{ datacenter }}"
+      "value": "{{ resourcegroup }}-acs-agents-{{ datacenter }}"
     },
     "agentCount": {
       "value": {{ agentcount }}
@@ -18,7 +18,7 @@
       "value": "Standard_DS2"
     },
     "linuxAdminUsername": {
-      "value": "joaraacs{{ datacenter }}"
+      "value": "{{ resourcegroup }}acs{{ datacenter }}"
     },
     "orchestratorType": {
       "value": "Kubernetes"

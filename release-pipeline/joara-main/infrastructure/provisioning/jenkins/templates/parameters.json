@@ -6,13 +6,13 @@
       "value": "{{ sshkey }}"
     },
     "adminUserName": {
-      "value": "joara{{ datacenter }}"
+      "value": "{{ resourcegroup }}{{ datacenter }}"
     },
     "authenticationType": {
       "value": "sshPublicKey"
     },
     "dnsPrefix": {
-      "value": "joara-release-{{ datacenter }}"
+      "value": "{{ resourcegroup }}-release-{{ datacenter }}"
     },
     "publicIPName": {
       "value": "JenkinsIP{{ datacenter }}"
@@ -21,10 +21,10 @@
       "value": "new"
     },
     "publicIPResourceGroup": {
-      "value": "joara-{{ datacenter }}"
+      "value": "{{ resourcegroup }}-{{ datacenter }}"
     },
     "storageAccountName": {
-      "value": "joarast{{ datacenter }}"
+      "value": "{{ resourcegroup }}st{{ datacenter }}"
     },
     "storageAccountNewOrExisting": {
       "value": "new"
@@ -33,16 +33,16 @@
       "value": "Premium_LRS"
     },
     "storageAccountResourceGroup": {
-      "value": "joara-{{ datacenter }}"
+      "value": "{{ resourcegroup }}-{{ datacenter }}"
     },
     "vmName": {
-      "value": "joaracommon{{ datacenter }}"
+      "value": "{{ resourcegroup }}common{{ datacenter }}"
     },
     "vmSize": {
       "value": "Standard_DS2_v2"
     },
     "location": {
-      "value": "eastus"
+      "value": "{{ location }}"
     },
     "jenkinsReleaseType": {
       "value": "LTS"

@@ -11,14 +11,14 @@ from ..log import logging
 class VersionManager(object):
     def __init__(self, **kwargs):
         self.__dict__ = kwargs
-        self.logger = logging.get_joara_logger(self.__class__.__name__)
+        self.logger = logging.get_logger(self.__class__.__name__)
 
 
     def get_latest_image_dict(self, datacenter='local'):
-        ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
+        ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
         fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
         try:
-            if datacenter != 'local' and strtobool(self.attributes['cluster_config']['JOARA_APP_LATEST']):
+            if datacenter != 'local':
                 cmd = "az storage blob download --container-name imagesversion --file {}/images_{datacenter}.yml --name images_{datacenter}.yml".format(
                     ifolderpath, datacenter=self.datacenter)
                 run(cmd, echo=True)
@@ -48,7 +48,7 @@ class VersionManager(object):
             dicitem["commit"] = "{{ commit }}"
             dicitem["environment"] = "{{ environment }}"
             dicitem["image"] = self.attributes['image']
-            dicitem["registry"] = self.attributes['cluster_config']['JOARA_APP_DOCKER_REGISTRY']
+            dicitem["registry"] =  self.app_docker_registry
             dicitem["user"] = self.attributes['user']
             dicitem["version"] = "{{ version }}"
             dic[self.attributes['image']] = dict()
@@ -59,12 +59,8 @@ class VersionManager(object):
 
 
     def update_images_yaml(self, datacenter='local', **kwdic):
-        fname = os.path.join(self.joara_app_main, 'joara-app-provision', 'images.yml')
-        fnamelatest = os.path.join(self.joara_app_main, 'infrastructure', 'images_version',
+        fnamelatest = os.path.join(self.app_main, 'infrastructure', 'images_version',
                                    'images_{}.yml'.format(datacenter))
-        if not os.path.isfile(fnamelatest):
-            copyfile(fname, fnamelatest)
-
         with open(fnamelatest) as f:
             newdct = yaml.load(f)
 
@@ -77,7 +73,7 @@ class VersionManager(object):
             yaml.dump(newdct, f, default_flow_style=False)
 
         if datacenter != 'local':
-            fnamelatest = os.path.join(self.joara_app_main, 'infrastructure',  'images_version')
+            fnamelatest = os.path.join(self.app_main, 'infrastructure',  'images_version')
             cmd = "az storage blob upload -f {}/images_{datacenter}.yml -c imagesversion -n images_{datacenter}.yml".format(
                 fnamelatest, datacenter=datacenter)
             run(cmd, echo=True)
@@ -85,7 +81,7 @@ class VersionManager(object):
 
     def get_images_list(self, datacenter='local'):
         try:
-            ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
+            ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
             fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
             with open(fnamelatest) as f:
                 dict = yaml.load(f)
@@ -98,7 +94,7 @@ class VersionManager(object):
             sys.exit(1)
 
     def get_latest_image_sync_dict(self, image, datacenter='local'):
-        ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
+        ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
         self.fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
         with open(self.fnamelatest) as f:
             imagedict = yaml.load(f)
@@ -115,7 +111,7 @@ class VersionManager(object):
                 dicitem["commit"] = "{{ commit }}"
                 dicitem["environment"] = "{{ environment }}"
                 dicitem["image"] = self.attributes['image']
-                dicitem["registry"] = self.attributes['cluster_config']['JOARA_APP_DOCKER_REGISTRY']
+                dicitem["registry"] = self.app_docker_registry
                 dicitem["user"] = self.attributes['user']
                 dicitem["version"] = "{{ version }}"
                 dic[image] = dict()

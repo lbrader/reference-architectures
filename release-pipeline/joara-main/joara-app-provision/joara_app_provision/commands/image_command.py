@@ -1,11 +1,11 @@
 from __future__ import absolute_import, print_function, division
-from ..python_libs.utils import find_joara_app_main
+from ..python_libs.utils import find_app_main
 from ..commands import from_base
 import os
 from ..log import logging
 import platform
 import sys
-logger = logging.get_joara_logger(__name__)
+logger = logging.get_logger(__name__)
 
 def image_add_subcommand(parser):
     subcommand = parser.add_parser('image')
@@ -21,7 +21,8 @@ def image_add_subcommand(parser):
             'scale',
             'patch',
             'delete',
-            'get'
+            'get',
+            'getservice'
         ],
         help="Which action to be performed on the image "
     )

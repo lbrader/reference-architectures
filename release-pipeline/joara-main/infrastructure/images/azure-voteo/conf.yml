@@ -1,0 +1,5 @@
+image: azure-voteo
+port: 80
+env:
+  - name: REDIS
+    value: "azure-vote-back"

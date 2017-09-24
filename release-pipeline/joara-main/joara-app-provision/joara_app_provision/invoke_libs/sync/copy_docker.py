@@ -4,11 +4,12 @@ import os
 import sys
 import json
 from ...invoke_libs.version_manager import VersionManager
+from ...invoke_libs import Attributes
 import traceback
 from azure.mgmt.storage import StorageManagementClient
 from azure.common.credentials import ServicePrincipalCredentials
 from invoke import run
-from ...python_libs.utils import find_joara_app_main
+from ...python_libs.utils import find_app_main
 from ...commands import from_base
 import os
 from kubernetes import client, config
@@ -23,13 +24,13 @@ class CopyDocker(object):
             'user': 'dev',
             'registry_version': 'v2'
         }
-        self.logger = logging.get_joara_logger(self.__class__.__name__)
+        self.logger = logging.get_logger(self.__class__.__name__)
         self.attributes.update(kwargs)
-        self.attributes['user'] = self.attributes['cluster_config']['JOARA_APP_DOCKER_USER']
-        self.joara_app_main = self.attributes['cluster_config']['JOARA_APP_MAIN']
-        self.datacenter = self.attributes['cluster_config']['JOARA_APP_DATACENTER']
+        self.attributes['user'] = self.attributes['cluster_config']['APP_DATACENTER']
+        self.app_main = self.attributes['cluster_config']['APP_MAIN']
+        self.datacenter = self.attributes['cluster_config']['APP_DATACENTER']
         self.from_datacenter = self.attributes["from_datacenter"]
-        self.registry = self.attributes['cluster_config']['JOARA_APP_DOCKER_REGISTRY']
+        self.registry = kwargs["app_docker_registry"]
         self.resource_group_prefix = self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX']
 
         try:
@@ -75,14 +76,10 @@ class CopyDocker(object):
         run("az login -u {} -p {} --tenant {} --service-principal".format(os.environ['AZURE_CLIENT_ID'], os.environ['AZURE_CLIENT_SECRET'],
                                                                           os.environ['AZURE_TENANT_ID']))
 
-        run("az acr login --name joaraacr{}".format(self.from_datacenter))
+        run("az acr login --name {}acr{}".format(self.resource_group_prefix,self.from_datacenter))
 
 
         try:
-            os.makedirs("{user}/.kube".format(user=os.path.expanduser("~")), exist_ok=True)
-            #run("az acs kubernetes get-credentials --resource-group=jora-{datacenter} --name=jora-acs-{datacenter}".format(datacenter=self.datacenter))
-            run("scp  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i {user}/.ssh/id_rsa joaraacs{datacenter}@jora-acs-mgmt-{datacenter}.eastus.cloudapp.azure.com:.kube/config {user}/.kube/config".format(
-                    user=os.path.expanduser("~"), datacenter=self.datacenter))
             config.load_kube_config()
             self.apiclient = api_client.ApiClient()
             self.api = core_v1_api.CoreV1Api(self.apiclient)
@@ -104,7 +101,7 @@ class CopyDocker(object):
         os.chdir(directory)
 
     def copyfromstroage(self, datacenter='local'):
-        ifolderpath = os.path.join(self.joara_app_main, 'infrastructure', 'images_version')
+        ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
         try:
             if datacenter != 'local' :
                 storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
@@ -162,10 +159,10 @@ class CopyDocker(object):
                         self.logger.info( "image {} version are already in sync".format(image_name))
 
         if len(jobs) == 0:
-            self.logger.info( "No images exist to copy from datcenter: {} to  datacenter: {}".format( self.from_datacenter,self.datacenter))
+            self.logger.info( "No images exist to copy from datacenter: {} to  datacenter: {}".format( self.from_datacenter,self.datacenter))
 
         else:
-            self.logger.info("Total no. of images to copy from datcenter: {} to  datacenter: {} is {}".format(self.from_datacenter, self.datacenter,len(jobs)))
+            self.logger.info("Total no. of images to copy from datacenter: {} to  datacenter: {} is {}".format(self.from_datacenter, self.datacenter,len(jobs)))
 
             for j in jobs:
                 j.start()
@@ -176,11 +173,11 @@ class CopyDocker(object):
 
             if len(return_dict.values()) == len(jobs):
 
-                self.logger.info("Successfully copied images from datcenter: {} to  datacenter: {}".format(self.from_datacenter,self.datacenter))
+                self.logger.info("Successfully copied images from datacenter: {} to  datacenter: {}".format(self.from_datacenter,self.datacenter))
                 self.logger.info("Overall status: {}".format(str(return_dict)))
 
             else:
-                self.logger.info("ERROR: All images are not copied from datcenter: {} to  datacenter: {}, please refer error messages".format(self.from_datacenter,self.datacenter))
+                self.logger.info("ERROR: All images are not copied from datacenter: {} to  datacenter: {}, please refer error messages".format(self.from_datacenter,self.datacenter))
                 self.logger.info("Overall status: {}".format(str(return_dict)))
 
 
@@ -207,7 +204,7 @@ class CopyDocker(object):
         run("docker tag {fqdi} {tofqdi}".format(fqdi=fqdi, tofqdi=tofqdi))
         self.logger.info("tag image completed for: {}".format(tofqdi))
 
-        run("az acr login --name joaraacr{}".format(self.datacenter))
+        run("az acr login --name {}acr{}".format(self.resource_group_prefix,self.datacenter))
         self.logger.info("push image started for: {}".format(tofqdi))
         run("docker push {tofqdi}".format(tofqdi=tofqdi))
 
@@ -223,8 +220,8 @@ class CopyDocker(object):
             currentimagedic['version'] = localimagedic['version']
             currentimagedic['branch'] = localimagedic['branch']
             currentimagedic['commit'] = localimagedic['commit']
-            currentimagedic['environment'] = self.attributes['cluster_config']['JOARA_APP_DATACENTER']
-            currentimagedic["registry"] = self.attributes['cluster_config']['JOARA_APP_DOCKER_REGISTRY']
+            currentimagedic['environment'] = self.datacenter
+            currentimagedic["registry"] = self.registry
             currentimagedic['build_hostname'] = localimagedic['build_hostname']
             currentimagedic['build_ip_address'] = localimagedic['build_ip_address']
             currentimagedic['user'] = self.attributes['user']
@@ -236,7 +233,7 @@ class CopyDocker(object):
             self.logger.error("ERROR: {} : image sync failure for {} ".format(err,image))
 
         try:
-            self.cd(self.joara_app_main)
+            self.cd(self.app_main)
             self.logger.info("Deploying image: {}".format(tofqdi))
             resp = self.k8s_beta.list_namespaced_replica_set(namespace="default")
             count = 1
@@ -244,7 +241,7 @@ class CopyDocker(object):
                 if i.metadata.name == image:
                     count = int(i.spec.replicas)
                     self.logger.info(
-                        "### Deployment: {image} already running in datacenter {datacenter} with replica {count} deployed ###".format(
+                        "Deployment: {image} already running in datacenter {datacenter} with replica {count} deployed".format(
                             image=self.image, datacenter=self.datacenter, count=count))
             module = os.path.join('infrastructure', 'images', 'run')
             args = Attributes(
@@ -259,11 +256,3 @@ class CopyDocker(object):
         self.logger.info('All copy and deploy steps completed for image {}'.format(image))
         return_dict[image] = 'completed'
 
-
-class Attributes(object):
-    def __init__(self, *initial_data, **kwargs):
-        for dictionary in initial_data:
-            for key in dictionary:
-                setattr(self, key, dictionary[key])
-        for key in kwargs:
-            setattr(self, key, kwargs[key])

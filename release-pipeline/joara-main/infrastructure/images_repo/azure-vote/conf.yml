@@ -1,0 +1,5 @@
+image: {{ git_repo_name }}
+port: 80
+env:
+  - name: REDIS
+    value: "azure-vote-back"

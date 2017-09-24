@@ -3,10 +3,10 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "name": {
-            "value": "joara{{ datacenter }}"
+            "value": "{{ resourcegroup }}{{ datacenter }}"
         },
         "location": {
-            "value": "eastus"
+            "value": "{{ location }}"
         },
         "accountType": {
             "value": "Standard_LRS"

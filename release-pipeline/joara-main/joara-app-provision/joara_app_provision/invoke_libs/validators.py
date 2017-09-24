@@ -3,7 +3,7 @@ import os.path
 from ..log import logging
 import joara_app_provision.invoke_libs.core.keys as keys
 import sys
-logger = logging.get_joara_logger(__name__)
+logger = logging.get_logger(__name__)
 
 def validate_ssh_key(ssh_key_file):
 

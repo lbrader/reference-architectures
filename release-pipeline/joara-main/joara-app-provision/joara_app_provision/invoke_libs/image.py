@@ -15,6 +15,12 @@ import json
 from azure.mgmt.storage import StorageManagementClient
 from azure.common.credentials import ServicePrincipalCredentials
 import git
+from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.containerregistry import ContainerRegistryManagementClient
+from azure.cli.command_modules.acr.custom import acr_login
+from base64 import b64encode
+import requests
+from requests.utils import to_native_string
 from ..log import logging
 
 class Image(object):
@@ -25,7 +31,7 @@ class Image(object):
             'registry_version': 'v2',
             'deploy': False
         }
-        self.logger = logging.get_joara_logger(self.__class__.__name__)
+        self.logger = logging.get_logger(self.__class__.__name__)
         self.attributes.update(kwargs)
         if 'dockerfile_ext' in kwargs:
             self.attributes['dockerfile'] = "Dockerfile.{}".format(kwargs['dockerfile_ext'])
@@ -33,23 +39,24 @@ class Image(object):
             self.attributes['dockerfile'] = "Dockerfile"
 
         self.task =self.attributes['task']
-        self.attributes['joara_app_main'] = self.attributes['cluster_config']['JOARA_APP_MAIN']
-        self.attributes['user'] = self.attributes['cluster_config']['JOARA_APP_DOCKER_USER']
-        self.joara_app_main = self.attributes['joara_app_main']
-        self.attributes['datacenter'] = self.attributes['cluster_config']['JOARA_APP_DATACENTER']
-        self.docker_user = self.attributes['cluster_config']['JOARA_APP_DOCKER_USER']
-        self.docker_registry = self.attributes['cluster_config']['JOARA_APP_DOCKER_REGISTRY']
-        self.resource_group_prefix = self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX']
+        self.attributes['app_main'] = self.attributes['cluster_config']['APP_MAIN']
+        self.attributes['user'] = self.attributes['cluster_config']['APP_DATACENTER']
+        self.app_main = self.attributes['app_main']
+        self.attributes['datacenter'] = self.attributes['cluster_config']['APP_DATACENTER']
         self.datacenter = self.attributes['datacenter']
+        self.docker_user = self.attributes['cluster_config']['APP_DATACENTER']
+        self.app_docker_registry="{}acr{}.azurecr.io".format(self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX'], self.datacenter)
+        self.resource_group_prefix = self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX']
         self.attributes['commit'] = self._get_git_commit()
 
         try:
             if ( 'AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ) :
-                self.credentials = ServicePrincipalCredentials(
-                    client_id=os.environ['AZURE_CLIENT_ID'],
-                    secret=os.environ['AZURE_CLIENT_SECRET'],
-                    tenant=os.environ['AZURE_TENANT_ID']
-                )
+
+                self.__dict__.update({
+                    'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
+                    'client_id': os.environ['AZURE_CLIENT_ID'],
+                    'client_secret': os.environ['AZURE_CLIENT_SECRET'],
+                    'tenant_id': os.environ['AZURE_TENANT_ID']})
             else:
                 self.__dict__.update({
                     'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
@@ -66,32 +73,47 @@ class Image(object):
                 self.logger.error(logs)
                 raise RuntimeError(logs)
 
-        if ('AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
-            storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
-            resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
-            storage_name = "{}{}".format(self.resource_group_prefix, self.datacenter)
-            storage_keys = storage_client.storage_accounts.list_keys(resource_group, storage_name)
-            storage_keys = {v.key_name: v.value for v in storage_keys.keys}
+        self.credentials = ServicePrincipalCredentials(
+            client_id=self.client_id,
+            secret=self.client_secret,
+            tenant=self.tenant_id
+        )
 
-            if storage_keys:
-                os.environ['AZURE_STORAGE_KEY']=  storage_keys['key1']
-                os.environ['AZURE_STORAGE_ACCOUNT'] = storage_name
-                run("az storage container create -n {}".format("imagesversion"))
+        self.client = ContainerRegistryManagementClient(self.credentials, self.subscription_id)
 
-            run("az login -u {} -p {} --tenant {} --service-principal".format(os.environ['AZURE_CLIENT_ID'], os.environ['AZURE_CLIENT_SECRET'],
-                                                                              os.environ['AZURE_TENANT_ID']))
-            run("az acr login --name joaraacr{}".format(self.datacenter))
-        else:
-            logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, "
-            self.logger.error(logs)
-            raise RuntimeError(logs)
+        if self.task == "build" or self.task == "push":
+            if ('AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
+                storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
+                resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
+                storage_name = "{}{}".format(self.resource_group_prefix, self.datacenter)
+                storage_keys = storage_client.storage_accounts.list_keys(resource_group, storage_name)
+                storage_keys = {v.key_name: v.value for v in storage_keys.keys}
+
+                if storage_keys:
+                    os.environ['AZURE_STORAGE_KEY']=  storage_keys['key1']
+                    os.environ['AZURE_STORAGE_ACCOUNT'] = storage_name
+                    run("az storage container create -n {}".format("imagesversion"))
+
+
+            else:
+                logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, "
+                self.logger.error(logs)
+                raise RuntimeError(logs)
+
+        if not self.attributes['image']:
+            self.logger.error("Image name {} is not a valid".format(self.attributes['image']))
+            sys.exit(1)
+
 
         if self.task == "build" or self.task == "push" :
+            run("az login -u {} -p {} --tenant {} --service-principal".format(os.environ['AZURE_CLIENT_ID'], os.environ['AZURE_CLIENT_SECRET'],
+                 os.environ['AZURE_TENANT_ID']))
+            run("az acr login --name {}acr{}".format(self.resource_group_prefix,self.datacenter))
+            #self._docker_login()
             self.attributes['version'] = self._get_next_version()
 
             self.attributes['fqdi'] = "{registry}/{user}/{image}:{version}".format(
-                registry=self.attributes['cluster_config'][
-                    'JOARA_APP_DOCKER_REGISTRY'],
+                registry=self.app_docker_registry,
                 user=self.attributes['user'],
                 image=self.attributes['image'],
                 version=self.attributes['version']
@@ -121,7 +143,7 @@ class Image(object):
         imagedic['version'] = self.attributes['version']
         imagedic['branch'] = self._get_git_branch()
         imagedic['commit'] = '{}'.format(self.attributes['commit'])
-        imagedic['environment'] = self.attributes['cluster_config']['JOARA_APP_DATACENTER']
+        imagedic['environment'] = self.attributes['cluster_config']['APP_DATACENTER']
         imagedic['build_hostname'] = socket.gethostname()
         imagedic['build_ip_address'] = self._get_ip_address()
 
@@ -146,7 +168,7 @@ class Image(object):
         currentimagedic['version'] = localimagedic['version']
         currentimagedic['branch'] = localimagedic['branch']
         currentimagedic['commit'] = localimagedic['commit']
-        currentimagedic['environment'] = self.attributes['cluster_config']['JOARA_APP_DATACENTER']
+        currentimagedic['environment'] = self.attributes['cluster_config']['APP_DATACENTER']
         currentimagedic['build_hostname'] = localimagedic['build_hostname']
         currentimagedic['build_ip_address'] = localimagedic['build_ip_address']
 
@@ -173,7 +195,7 @@ class Image(object):
         getoutput(cmd)
 
     def _get_git_commit(self):
-        git_dir = os.path.join(self.joara_app_main)
+        git_dir = os.path.join(self.app_main)
         repo = Repo(git_dir)
         try:
             commitid = repo.head.reference.commit.hexsha
@@ -183,7 +205,7 @@ class Image(object):
         return commit
 
     def _get_git_branch(self):
-        git_dir = os.path.join(self.joara_app_main)
+        git_dir = os.path.join(self.app_main)
         repo = Repo(git_dir)
         try:
             branch = repo.active_branch
@@ -210,15 +232,95 @@ class Image(object):
         else:
             return self._get_tags_v2()
 
+
+    def _docker_login(self):
+        try:
+
+            resource_group="{resourcegroup}-{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
+            registry_name="{resourcegroup}acr{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
+            registries = self.client.registries
+            registry = registries.get(resource_group, registry_name)
+
+            if registry.admin_user_enabled:
+                cred = registries.list_credentials(resource_group, registry_name)
+                acr_login("{}.azurecr.io".format(registry_name),resource_group,cred.username,cred.passwords[0].value)
+                self.logger.info("Docker logged in with ACR Credentials")
+            else:
+                self.logger.error("ACR Not enable with admin access, please enable it")
+        except Exception as err:
+            self.logger.error("Error logging into docker using acr credentials: {0}.".format(err))
+
     def _get_tags_v2(self):
         try:
-            response = self.getoutput("az acr repository show-tags --name joaraacr{datacenter} --repository {datacenter}/{image}  -o json".format(datacenter=self.attributes['cluster_config']['JOARA_APP_DATACENTER'],image=self.attributes['image']))
-            response=json.loads(response)
+
+            resource_group="{resourcegroup}-{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
+            registry_name="{resourcegroup}acr{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
+            registries=self.client.registries
+            registry = registries.get(resource_group, registry_name)
+            repository="{datacenter}/{image}".format(datacenter=self.datacenter,image=self.attributes['image'])
+
+            if registry.admin_user_enabled:
+                cred = registries.list_credentials(resource_group, registry_name)
+                try:
+                    response = self._obtain_data_from_registry("{}.azurecr.io".format(registry_name),
+                                                               "/v2/_catalog", cred.username,
+                                                               cred.passwords[0].value)
+                    repositories_list = response["repositories"]
+                    if not "{}".format(repository) in repositories_list:
+                        self.logger.error("Requested image: {} not exist in the registry: {}".format(repository,"{}.azurecr.io".format(registry_name)))
+                        if self.task == "build" or self.task == "push":
+                            return None
+                        else:
+                            sys.exit(1)
+                    else:
+                        self.logger.info("Requested image: {} exist in the registry: {}".format(repository,
+                                                                                                "{}.azurecr.io".format(
+                                                                                                    registry_name)))
+                        response= self._obtain_data_from_registry("{}.azurecr.io".format(registry_name),
+                                                                   "/v2/{}/tags/list".format(repository), cred.username,
+                                                                   cred.passwords[0].value)
+                        response= response["tags"]
+                        self.logger.info("ACR Image versions:{}".format(response))
+                except Exception as err:
+                    self.logger.error("Error getting image details from repo: {0}.".format(err))
+            else:
+                self.logger.error("ACR Not enable with admin access, please enable it")
             return response
+        except Exception as err:
+            self.logger.error("Error getting image version details from repo: {0}.".format(err))
+            return None
+        return response
+
+    def _basic_auth_str(self,username, password):
+        return 'Basic ' + to_native_string(
+            b64encode(('%s:%s' % (username, password)).encode('latin1')).strip()
+        )
+
+    def _headers(self,username, password):
+        auth = self._basic_auth_str(username, password)
+        return {'Authorization': auth}
+
+    def _obtain_data_from_registry(self,login_server,
+                                   path,
+                                   username,
+                                   password):
+        try:
+            registryEndpoint = 'https://' + login_server
+            self.logger.info("Connecting to ACR: {}".format(registryEndpoint + path))
+            response = requests.get(
+                registryEndpoint + path,
+                headers=self._headers(username, password)
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                return result
+            else:
+                self.logger.exception("Error getting image detail from acr")
+            #response.raise_for_status()
         except Exception as err:
             self.logger.error("Error getting image detail from repo: {0}.".format(err))
             return None
-        return response
 
     def _get_next_version(self):
         v = self._get_version()
@@ -230,8 +332,9 @@ class Image(object):
     def _get_local_next_version(self, v):
         try:
 
-            base_url = "unix:/" + \
-                       self.attributes['cluster_config']['DOCKER_SOCK']
+            base_url= "unix:///var/run/docker.sock"
+            # base_url = "unix:/" + \
+            #            self.attributes['cluster_config']['DOCKER_SOCK']
 
             client = Client(base_url=base_url)
             images = client.images()
@@ -240,8 +343,7 @@ class Image(object):
 
             docker_registry = "{registry}/{user}/{image}:{v}".format(
                 v=str(v),
-                registry=self.attributes['cluster_config'][
-                    'JOARA_APP_DOCKER_REGISTRY'],
+                registry=self.app_docker_registry,
                 user=self.attributes['user'],
                 image=self.attributes['image']
             )

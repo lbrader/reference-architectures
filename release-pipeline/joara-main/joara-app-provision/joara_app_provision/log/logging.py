@@ -29,25 +29,24 @@ import logging
 import logging.handlers
 import colorama
 
-
-JOARA_ROOT_LOGGER_NAME = 'joara'
+ROOT_LOGGER_NAME = 'app'
 
 
 class JoaraLoggingLevelManager(object):  # pylint: disable=too-few-public-methods
     CONSOLE_LOG_CONFIGS = [
         # (default)
         {
-            JOARA_ROOT_LOGGER_NAME: logging.WARNING,
+            ROOT_LOGGER_NAME: logging.WARNING,
             'root': logging.CRITICAL,
         },
         # --verbose
         {
-            JOARA_ROOT_LOGGER_NAME: logging.INFO,
+            ROOT_LOGGER_NAME: logging.INFO,
             'root': logging.CRITICAL,
         },
         # --debug
         {
-            JOARA_ROOT_LOGGER_NAME: logging.DEBUG,
+            ROOT_LOGGER_NAME: logging.DEBUG,
             'root': logging.DEBUG,
         }]
 
@@ -55,7 +54,7 @@ class JoaraLoggingLevelManager(object):  # pylint: disable=too-few-public-method
         self.user_setting_level = self.determine_verbose_level(argv)
 
     def get_user_setting_level(self, logger):
-        logger_name = logger.name if logger.name in (JOARA_ROOT_LOGGER_NAME, 'root') else 'root'
+        logger_name = logger.name if logger.name in (ROOT_LOGGER_NAME, 'root') else 'root'
         return self.CONSOLE_LOG_CONFIGS[self.user_setting_level][logger_name]
 
     @classmethod
@@ -92,7 +91,7 @@ class ColorizedStreamHandler(logging.StreamHandler):
     # Show the level name if coloring is disabled (e.g. INFO).
     # Also, Root logger should show the logger name.
     CONSOLE_LOG_FORMAT = {
-        'joara': {
+        'app': {
             True: '%(message)s',
             False: '%(levelname)s: %(message)s',
         },
@@ -166,8 +165,8 @@ class JoaraRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
     def get_log_file_path(self):
         if not os.path.isdir(self.LOGFILE_DIR):
-            os.makedirs(self.LOGFILE_DIR)
-        return os.path.join(self.LOGFILE_DIR, 'joara.log')
+            os.makedirs(self.LOGFILE_DIR, exist_ok=True)
+        return os.path.join(self.LOGFILE_DIR, 'app.log')
 
 
 def configure_logging(argv, stream=None):
@@ -177,9 +176,9 @@ def configure_logging(argv, stream=None):
     cleared first.
     """
     level_manager = JoaraLoggingLevelManager(argv)
-    loggers = [logging.getLogger(), logging.getLogger(JOARA_ROOT_LOGGER_NAME)]
+    loggers = [logging.getLogger(), logging.getLogger(ROOT_LOGGER_NAME)]
 
-    logging.getLogger(JOARA_ROOT_LOGGER_NAME).propagate = False
+    logging.getLogger(ROOT_LOGGER_NAME).propagate = False
 
     for logger in loggers:
         # Set the levels of the loggers to lowest level.Handlers can override by choosing a higher level.
@@ -197,9 +196,9 @@ def configure_logging(argv, stream=None):
             logger.addHandler(JoaraRotatingFileHandler())
 
     if JoaraRotatingFileHandler.ENABLED:
-        get_joara_logger(__name__).debug("File logging enabled - Writing logs to '%s'.", JoaraRotatingFileHandler.LOGFILE_DIR)
+        get_logger(__name__).debug("File logging enabled - Writing logs to '%s'.", JoaraRotatingFileHandler.LOGFILE_DIR)
 
 
-def get_joara_logger(module_name=None):
-    return logging.getLogger(JOARA_ROOT_LOGGER_NAME).getChild(module_name) if module_name else logging.getLogger(
-        JOARA_ROOT_LOGGER_NAME)
+def get_logger(module_name=None):
+    return logging.getLogger(ROOT_LOGGER_NAME).getChild(module_name) if module_name else logging.getLogger(
+        ROOT_LOGGER_NAME)

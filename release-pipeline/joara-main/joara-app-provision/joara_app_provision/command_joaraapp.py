@@ -2,12 +2,13 @@
 from __future__ import absolute_import, print_function, division
 from .commands.bootstrap_command import bootstrap_add_subcommand, bootstrap_subcommand
 from .commands.sync_command import sync_image_add_subcommand, sync_subcommand
-from .commands.configure_command import configure_add_subcommand, configure_subcommand
+from .commands.jenkins_command import jenkins_add_subcommand, jenkins_subcommand
 from .commands.image_command import image_add_subcommand, image_subcommand
+from .commands.git_command import git_add_subcommand, git_subcommand
 from .commands.destroy_command import destroy_add_subcommand, destroy_subcommand
 import argparse
 import sys
-from .log.logging import configure_logging, get_joara_logger
+from .log.logging import configure_logging, get_logger
 from .log import logging
 
 def main():
@@ -17,7 +18,7 @@ def main():
     logging_stream = None
     output = sys.stdout
     configure_logging(args, logging_stream)
-    logger = get_joara_logger(__name__)
+    logger = get_logger(__name__)
     logger.debug('Command arguments %s', args)
     if args and (args[0] == '--version' or args[0] == '-v'):
        print("v1.0.0")
@@ -39,7 +40,8 @@ def main():
 
     subparsers = parser.add_subparsers(dest='cmd', help='')
 
-    configure_add_subcommand(subparsers)
+    jenkins_add_subcommand(subparsers)
+    git_add_subcommand(subparsers)
     bootstrap_add_subcommand(subparsers)
     sync_image_add_subcommand(subparsers)
     image_add_subcommand(subparsers)
@@ -57,8 +59,10 @@ def main():
         image_subcommand(args)
     elif args.cmd == 'destroy':
         destroy_subcommand(args)
-    elif args.cmd == 'configure':
-        configure_subcommand(args)
+    elif args.cmd == 'jenkinsconfigure':
+        jenkins_subcommand(args)
+    elif args.cmd == 'gitconfigure':
+        git_subcommand(args)
     elif args.cmd == 'syncimage':
         sync_subcommand(args)
     else:

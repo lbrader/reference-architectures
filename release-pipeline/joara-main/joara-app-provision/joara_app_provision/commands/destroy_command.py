@@ -1,6 +1,6 @@
 from __future__ import absolute_import, print_function, division
 from ..python_libs.context import Context
-from ..python_libs.utils import find_joara_app_main
+from ..python_libs.utils import find_app_main
 from ..commands import from_base
 import os
 
@@ -13,6 +13,7 @@ def destroy_add_subcommand(parser):
         required=True,
         type=str,
         choices=[
+            'all',
             'jenkins',
             'acr',
             'acs',

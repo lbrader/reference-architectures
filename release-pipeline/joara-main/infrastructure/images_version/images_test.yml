@@ -1,11 +1,10 @@
-nodejs:
-  branch: Not found
-  build_hostname: joaracommonjenkins
-  build_ip_address: 10.0.0.5
-  comment: ''
-  commit: Not found
+nodejso:
+  branch: master
+  build_hostname: h1
+  build_ip_address: 127.0.0.1
+  commit: 462c30f0b409bc736aa26758b67413f1b185fadd
   environment: test
-  image: nodejs
-  registry: joaraacrtest.azurecr.io
+  image: nodejso
+  registry: ajoaraacrtest.azurecr.io
   user: test
-  version: 0.0.27
+  version: 0.0.2
