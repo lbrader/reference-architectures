@@ -48,6 +48,7 @@ class Image(object):
         self.app_docker_registry="{}acr{}.azurecr.io".format(self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX'], self.datacenter)
         self.resource_group_prefix = self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX']
         self.attributes['commit'] = self._get_git_commit()
+        self.attributes['datetime'] = self._get_utcnow()
 
         try:
             if ( 'AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ) :
@@ -136,8 +137,7 @@ class Image(object):
         with open('COMMIT', 'w') as f:
             f.write(self.attributes['commit'])
 
-        run("docker build --file {dockerfile} --tag {fqdi} .".format(**
-                                                                     self.attributes), echo=True)
+        run("docker build --file {dockerfile} --build-arg GIT_COMMIT={commit} --build-arg VERSION={version} --build-arg DATETIME={datetime} --tag {fqdi} .".format(**self.attributes), echo=True)
         imagedic = {}
         imagedic['image'] = self.attributes['image']
         imagedic['version'] = self.attributes['version']
@@ -174,7 +174,10 @@ class Image(object):
 
         self.version_manager.update_images_yaml(datacenter=self.datacenter, **currentimagedic)
 
-
+    def _get_utcnow(self):
+        fmt = "%Y-%m-%dT%H-%M-%S.%f%Z"
+        now_utc = datetime.now(timezone('UTC'))
+        return now_utc.strftime(fmt)
 
     def _get_ip_address(self):
         try:
@@ -201,7 +204,7 @@ class Image(object):
             commitid = repo.head.reference.commit.hexsha
             commit = commitid
         except:
-            commit = 'Not found'
+            commit = 'Notfound'
         return commit
 
     def _get_git_branch(self):

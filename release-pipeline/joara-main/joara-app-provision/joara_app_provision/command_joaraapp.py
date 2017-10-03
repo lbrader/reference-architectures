@@ -27,7 +27,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Run script to provision JOARA-APP")
 
-    datacenters = ["jenkins","dev", "test", "prod"]
+    datacenters = ["jenkins","dev", "test", "prod", "all"]
     parser.add_argument(
         "-d", "--datacenter",
         type=str,
@@ -55,15 +55,15 @@ def main():
 
     elif args.cmd == 'bootstrap':
         bootstrap_subcommand(args)
-    elif args.cmd == 'image':
+    elif not args.datacenter in ["jenkins","all"] and args.cmd == 'image':
         image_subcommand(args)
     elif args.cmd == 'destroy':
         destroy_subcommand(args)
-    elif args.cmd == 'jenkinsconfigure':
+    elif args.datacenter in ["jenkins"]  and args.cmd == 'jenkinsconfigure':
         jenkins_subcommand(args)
     elif args.cmd == 'gitconfigure':
         git_subcommand(args)
-    elif args.cmd == 'syncimage':
+    elif not args.datacenter in ["jenkins","all"] and  args.cmd == 'syncimage':
         sync_subcommand(args)
     else:
-        raise RuntimeError('Unknown subcommand {}'.format(args.cmd))
+        logger.error('Unknown subcommand {}, use the correct datacenter'.format(args.cmd))

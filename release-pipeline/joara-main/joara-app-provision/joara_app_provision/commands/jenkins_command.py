@@ -11,7 +11,8 @@ def jenkins_add_subcommand(parser):
         type=str,
         choices=[
             'jenkins',
-            'pre-jenkins'
+            'pre-jenkins',
+            'monitor',
         ],
         help="Which module to configure. "
     )
@@ -25,9 +26,6 @@ def jenkins_add_subcommand(parser):
 def jenkins_subcommand(args):
     if 'jenkins' in args.group:
         from_base.configure_jenkins(args)
-    # elif 'git' in args.group:
-    #     if args.image:
-    #         from_base.configure_git(args)
-    #     else:
-    #         logger.warn("Please provide a image name to configure in git")
+    if 'monitor' in args.group:
+        from_base.configure_monitor(args)
 

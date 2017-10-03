@@ -38,7 +38,8 @@ setup(
         'kubernetes',
         'websocket-client===0.40.0',
         'paramiko',
-        'PyGithub'
+        'PyGithub',
+        'dnspython'
 
 
     ]

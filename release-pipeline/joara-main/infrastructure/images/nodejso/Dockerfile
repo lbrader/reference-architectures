@@ -5,6 +5,14 @@ WORKDIR /app
 
 ENV PATH /app/node_modules/.bin:$PATH
 
+ARG GIT_COMMIT
+ARG VERSION
+ARG DATETIME
+
+LABEL git-commit=$GIT_COMMIT
+LABEL version=$VERSION
+LABEL datetime=$DATETIME
+
 ADD files/package.json /app
 RUN npm install
 

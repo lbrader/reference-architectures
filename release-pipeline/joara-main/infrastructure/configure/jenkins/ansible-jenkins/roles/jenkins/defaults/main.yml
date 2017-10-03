@@ -9,6 +9,7 @@ jenkins_plugins:
   - ansicolor
   - build-timestamp
   - azure-credentials
+  - azure-vm-agents
   - ace-editor
   - ant
   - antisamy-markup-formatter
@@ -96,7 +97,7 @@ jenkins_repo_key_url: http://pkg.jenkins-ci.org/debian-stable/jenkins-ci.org.key
 jenkins_version: 2.32.3
 
 jenkins_jobs:
-  - test
+  - jobtemplate
 
 docker_edition: ce
 

@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'ubuntu' }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '30'))
@@ -68,9 +68,21 @@ pipeline {
                 sh 'ls -la infrastructure/images/{{ git_repo_name }}/'
             }
          }
-           stage('Insall APP and manage docker images') {
+         stage('Get SSH Keys') {
+             steps {
+                withCredentials([[$class: 'FileBinding',credentialsId: 'acs_private_key', variable: 'ENV_SSH_FILE']]) {
+
+                     sh 'mkdir -p ~/.ssh'
+                     sh 'rm -rf ~/.ssh/id_rsa'
+                     sh 'cp $ENV_SSH_FILE ~/.ssh/id_rsa'
+                     sh 'chmod 0600 ~/.ssh/id_rsa'
+                 }
+
+             }
+          }
+           stage('Install APP and manage docker images') {
             steps {
-                withCredentials([azureServicePrincipal('{{ jenkins_azure_credential }}')]) {
+                withCredentials([azureServicePrincipal("{{ jenkins_azure_credential }}_${env.BRANCH_NAME}")]) {
 
                         sh 'chmod +x build-scripts.sh'
                         sh './build-scripts.sh $BRANCH_NAME {{ git_repo_name }}'
@@ -90,6 +102,9 @@ pipeline {
             }
             success {
                 echo 'Job succeeeded!'
+                mail to: '{{ notification_email }}',
+                subject: "Success Pipeline: ${currentBuild.fullDisplayName}",
+                body: "Build completed successfully with ${env.BUILD_URL}"
             }
             unstable {
                 echo 'Job unstable :/'

@@ -1,13 +1,14 @@
 from jinja2 import Environment
 from os import environ
-from pygments import highlight, lexers, formatters
 from json import dumps
 import sys
-import zipfile
 from os import walk
 import os
+import socket
+import dns.resolver
+from ..log import logging
 
-
+logger = logging.get_logger(__name__)
 def render(template_string, dictionary):
     """
     recursively render a jinja2 template until all variable are resolved
@@ -33,17 +34,32 @@ class Struct:
         self.__dict__.update(entries)
 
 
-def zipfile(zipfile,folder):
-    zf = zipfile.ZipFile("{}.zip".format(zipfile), "w")
+def is_valid_ipv4_address(address):
+    try:
+        socket.inet_pton(socket.AF_INET, address)
+    except AttributeError:  # no inet_pton here, sorry
+        try:
+            socket.inet_aton(address)
+        except socket.error:
+            return False
+        return address.count('.') == 3
+    except socket.error:  # not a valid address
+        return False
 
-    for dirname, subdirs, files in walk(folder):
-        zf.write(dirname)
-        filepath = os.path.join(dirname, filename)
-        for filename in files:
-            zf.write(os.path.join(dirname, filename))
-    zf.close()
-    return filepath
+    return True
 
+def resolvedns(dnshost):
+    try:
+        logger.info("Checking DNS: {}".format(dnshost))
+        answers = dns.resolver.query(dnshost, 'A')
+        for rdata in answers:
+            if is_valid_ipv4_address(str(rdata)):
+                logger.debug("DNS exist: {}".format(str(rdata)))
+                return True
+        return True
+    except Exception as err:
+        logger.debug("DNS Error: {}".format(err))
+        return False
 
 class Attributes(object):
     def __init__(self, *initial_data, **kwargs):

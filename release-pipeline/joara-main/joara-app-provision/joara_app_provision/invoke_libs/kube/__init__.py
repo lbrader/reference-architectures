@@ -222,7 +222,7 @@ class KubeApi(object):
             self.logger.info("No Service details found for image {}, may be the service not deployed ".format(self.name))
             return False
         except Exception as err:
-            self.logger.error("Error getting service details: {}. ".format(err))
+            self.logger.error("Error getting service details: {}. May be service not exit or still the service getting deployed, please try after few mins ".format(err))
             return False
 
     def flatmap(self,f, items):
@@ -242,28 +242,6 @@ class KubeApi(object):
             return False
 
 
-deployment_app_old = """
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: {{ name }}
-spec:
-  replicas: {{ replicas }}
-  template:
-    metadata:
-      labels:
-        name: {{ name }}
-    spec:
-      containers:
-      - image: {{ registry }}/{{ user }}/{{ image }}:{{ version }}
-        name: {{ name }}
-        imagePullPolicy: Always
-        ports:
-        - containerPort: {{ port }}
-          name: http-server
-        env:
-          {{ env }}
-""".strip()
 
 deployment_app= """
 apiVersion: extensions/v1beta1
@@ -296,23 +274,6 @@ spec:
           {{ env }}
 """.strip()
 
-service_app_old = """
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ name }}
-  labels:
-    name: {{ name }}
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: {{ port }}
-      protocol: TCP
-  selector:
-    name: {{ name }}
-    
-""".strip()
 
 service_app = """
 apiVersion: v1

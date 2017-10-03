@@ -3,6 +3,12 @@ from ..python_libs.context import Context
 from ..python_libs.utils import find_app_main
 from ..commands import from_base
 import os
+from ..log import logging
+from ..invoke_libs import Attributes
+import sys
+import time
+
+logger = logging.get_logger(__name__)
 
 
 def destroy_add_subcommand(parser):
@@ -17,7 +23,6 @@ def destroy_add_subcommand(parser):
             'jenkins',
             'acr',
             'acs',
-            'vm',
             'monitor'
         ],
         help="Which module to destrory"
@@ -26,7 +31,6 @@ def destroy_add_subcommand(parser):
         '--action',
         type=str,
         choices=[
-            'plan-destroy',
             'destroy'
         ],
         nargs='?',
@@ -38,4 +42,12 @@ def destroy_add_subcommand(parser):
 
 
 def destroy_subcommand(args):
-    from_base.destroy(args)
+    all_datacenters = ['dev', 'test', 'prod', 'jenkins']
+    if args.datacenter == "all" and args.group == "all":
+        for dc in all_datacenters:
+            args = Attributes({'group': "all", "action": 'destroy', "datacenter": dc})
+            logger.info("################### Destroying datacenter {}, resource: {} started ###################".format(dc,args.group))
+            from_base.destroy(args)
+            logger.info("################### Destroying datacenter {}, resource: {} completed ###################".format(dc, args.group))
+    else:
+        from_base.destroy(args)

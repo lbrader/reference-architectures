@@ -62,6 +62,21 @@ def sync_version(run_file, args):
     }
     context.sync_action(attributes,args)
 
+def validate_dns(args):
+    app_main = find_app_main()
+    moudle_path = os.path.join(app_main, 'infrastructure', 'provisioning',args.group,'run')
+    context = Context(
+        file=moudle_path,
+        datacenter=args.datacenter,
+        group=args.group
+    )
+    if context.validatedns():
+        os.chdir(app_main)
+        return True
+    else:
+        return False
+
+
 def provision(args):
     app_main = find_app_main()
     moudle_path = os.path.join(app_main, 'infrastructure', 'provisioning',args.group,'run')
@@ -105,6 +120,18 @@ def configure_jenkins(args):
 
     context.copy_project()
     context.configure_jenkins()
+    os.chdir(app_main)
+
+def configure_monitor(args):
+    app_main = find_app_main()
+    moudle_path = os.path.join(app_main, 'infrastructure', 'configure','jenkins','run')
+    context = Context(
+        file=moudle_path,
+        datacenter=args.datacenter,
+        group=args.group
+    )
+
+    context.configure_alerting()
 
 def configure_git(args):
     app_main = find_app_main()
@@ -117,6 +144,7 @@ def configure_git(args):
     )
     context.copy_project()
     context.configure_git(args)
+    os.chdir(app_main)
 
 
 

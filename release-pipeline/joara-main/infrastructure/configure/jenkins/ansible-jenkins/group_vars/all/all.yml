@@ -1,2 +1,34 @@
 
 pre_install: "false"
+
+github_credentials_id: "{{ github_credentials_id }}"
+github_username: "{{ github_username }}"
+github_token: "{{ github_token }}"
+git_org_id: "{{ git_org_id }}"
+
+
+jenkins_vm_credentials_id: "{{ jenkins_vm_credentials_id }}"
+jenkins_vm_username: "{{ jenkins_vm_username }}"
+jenkins_vm_password: "{{ jenkins_vm_password }}"
+jenkins_storage_account: "{{ jenkins_storage_account }}"
+resource_group: "{{ resource_group }}"
+
+azure_credentials_id: "{{ azure_credentials_id }}"
+subscriptionId: "{{ subscriptionId }}"
+clientId: "{{ clientId }}"
+clientSecret: "{{ clientSecret }}"
+tenant: "{{ tenant }}"
+location: "{{ location }}"
+
+
+
+charset: 'UTF-8'
+default_suffix: '{{ default_suffix }}'
+reply_to: '{{ reply_to }}'
+smtp_host: '{{ smtp_host }}'
+smtp_password: '{{ smtp_password }}'
+smtp_port: "{{ smtp_port }}"
+smtp_user: '{{ smtp_user }}'
+
+jenkins_admin_email: "{{ jenkins_admin_email }}"
+jenkins_main_url: "{{ jenkins_main_url }}"

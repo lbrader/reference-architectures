@@ -28,6 +28,8 @@ import platform
 import logging
 import logging.handlers
 import colorama
+import time
+
 
 ROOT_LOGGER_NAME = 'app'
 
@@ -166,7 +168,8 @@ class JoaraRotatingFileHandler(logging.handlers.RotatingFileHandler):
     def get_log_file_path(self):
         if not os.path.isdir(self.LOGFILE_DIR):
             os.makedirs(self.LOGFILE_DIR, exist_ok=True)
-        return os.path.join(self.LOGFILE_DIR, 'app.log')
+        millis = int(round(time.time() * 1000))
+        return os.path.join(self.LOGFILE_DIR, 'app_{}.log'.format(millis))
 
 
 def configure_logging(argv, stream=None):

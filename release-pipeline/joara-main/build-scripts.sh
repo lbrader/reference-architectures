@@ -36,8 +36,19 @@ if [ "$TO_DATACENTER" == "master" ]; then
   TO_DATACENTER='prod'
 fi
 
+CONDA_DIR=/home/$USER/conda
+mkdir -p /home/$USER/conda
+wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
+chmod +x Miniconda3-latest-Linux-x86_64.sh
+./Miniconda3-latest-Linux-x86_64.sh  -f -b -p $CONDA_DIR
+echo "export PATH=$CONDA_DIR/bin:$PATH" >> ~/.bashrc
+source ~/.bashrc
 
-export PATH=/var/lib/jenkins/conda/bin:$PATH
+echo "export PATH=$CONDA_DIR/bin:$PATH" >> ~/.profile
+source ~/.profile
+conda create -n vjoaraapp3 python
+
+export PATH=$CONDA_DIR/bin:$PATH
 source activate vjoaraapp3
 
 
