@@ -21,9 +21,13 @@ from azure.cli.command_modules.acr.custom import acr_login
 from base64 import b64encode
 import requests
 from requests.utils import to_native_string
+import pickle
 from ..log import logging
 
 class Image(object):
+    """
+    Init image context with details of image and credentials
+    """
     def __init__(self, **kwargs):
         self.attributes = {
             'user': 'dev',
@@ -47,6 +51,7 @@ class Image(object):
         self.docker_user = self.attributes['cluster_config']['APP_DATACENTER']
         self.app_docker_registry="{}acr{}.azurecr.io".format(self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX'], self.datacenter)
         self.resource_group_prefix = self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX']
+        self.resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
         self.attributes['commit'] = self._get_git_commit()
         self.attributes['datetime'] = self._get_utcnow()
 
@@ -59,11 +64,16 @@ class Image(object):
                     'client_secret': os.environ['AZURE_CLIENT_SECRET'],
                     'tenant_id': os.environ['AZURE_TENANT_ID']})
             else:
-                self.__dict__.update({
-                    'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
-                    'client_id': self.cluster_config['AZURE_CLIENT_ID'],
-                    'client_secret': self.cluster_config['AZURE_CLIENT_SECRET'],
-                    'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
+                cuurent_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                                                      "{}.pickle".format(self.resource_group))
+                read_from_cache = os.path.isfile(cuurent_token_filename)
+
+                if (read_from_cache):
+                    azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
+                    self.client_id = azure_credentital['AZURE_CLIENT_ID']
+                    self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
+                    self.tenant_id = azure_credentital['AZURE_TENANT_ID']
+                    self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
 
                 os.environ['AZURE_CLIENT_ID'] = self.client_id
                 os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
@@ -85,9 +95,9 @@ class Image(object):
         if self.task == "build" or self.task == "push":
             if ('AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
                 storage_client = StorageManagementClient(self.credentials, os.environ['AZURE_SUBSCRIPTION_ID'])
-                resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
+
                 storage_name = "{}{}".format(self.resource_group_prefix, self.datacenter)
-                storage_keys = storage_client.storage_accounts.list_keys(resource_group, storage_name)
+                storage_keys = storage_client.storage_accounts.list_keys(self.resource_group, storage_name)
                 storage_keys = {v.key_name: v.value for v in storage_keys.keys}
 
                 if storage_keys:
@@ -122,6 +132,10 @@ class Image(object):
             self.version_manager = VersionManager(**self.__dict__)
 
     def current_version(self):
+        """
+        Return the current version of image for build or deploy or push
+        :return:
+        """
         return str(self._get_version())
 
     def version(self):
@@ -129,57 +143,83 @@ class Image(object):
 
 
     def build(self):
-        currentimagedic = self.version_manager.get_latest_image_dict()
-        self.attributes['currentimagedic'] = currentimagedic
+        """
+        Build docker image with FQDI of datacenter, user, image and version
+        :return:
+        """
+        try:
+            currentimagedic = self.version_manager.get_latest_image_dict()
+            self.attributes['currentimagedic'] = currentimagedic
 
-        with open('VERSION', 'w') as f:
-            f.write(self.attributes['version'])
-        with open('COMMIT', 'w') as f:
-            f.write(self.attributes['commit'])
+            with open('VERSION', 'w') as f:
+                f.write(self.attributes['version'])
+            with open('COMMIT', 'w') as f:
+                f.write(self.attributes['commit'])
 
-        run("docker build --file {dockerfile} --build-arg GIT_COMMIT={commit} --build-arg VERSION={version} --build-arg DATETIME={datetime} --tag {fqdi} .".format(**self.attributes), echo=True)
-        imagedic = {}
-        imagedic['image'] = self.attributes['image']
-        imagedic['version'] = self.attributes['version']
-        imagedic['branch'] = self._get_git_branch()
-        imagedic['commit'] = '{}'.format(self.attributes['commit'])
-        imagedic['environment'] = self.attributes['cluster_config']['APP_DATACENTER']
-        imagedic['build_hostname'] = socket.gethostname()
-        imagedic['build_ip_address'] = self._get_ip_address()
+            run("docker build --file {dockerfile} --build-arg GIT_COMMIT={commit} --build-arg VERSION={version} --build-arg DATETIME={datetime} --tag {fqdi} .".format(**self.attributes), echo=True)
+            imagedic = {}
+            imagedic['image'] = self.attributes['image']
+            imagedic['version'] = self.attributes['version']
+            imagedic['branch'] = self._get_git_branch()
+            imagedic['commit'] = '{}'.format(self.attributes['commit'])
+            imagedic['environment'] = self.attributes['cluster_config']['APP_DATACENTER']
+            imagedic['build_hostname'] = socket.gethostname()
+            imagedic['build_ip_address'] = self._get_ip_address()
 
-        currentimagedic.update(imagedic)
+            currentimagedic.update(imagedic)
 
-        self.version_manager.update_images_yaml(**currentimagedic)
-        self.logger.info("build image completed for: {}".format(self.attributes['fqdi']))
+            self.version_manager.update_images_yaml(**currentimagedic)
+            self.logger.info("build image completed for: {}".format(self.attributes['fqdi']))
+        except Exception as e:
+            logs = "Error in bulding docker image, {}".format(e)
+            self.logger.error(logs)
+            raise RuntimeError(logs)
 
     def push(self):
-        localimagedic = self.version_manager.get_latest_image_dict()
-        v = localimagedic['version']
+        """
+        Pushes docker image to registry
+        :return:
+        """
+        try:
+            localimagedic = self.version_manager.get_latest_image_dict()
+            v = localimagedic['version']
 
-        if self.attributes.get('flatten', False):
-            cmd = "docker-squash -t {fqdi} {fqdi}".format(**self.attributes)
-            run(cmd, echo=True)
+            if self.attributes.get('flatten', False):
+                cmd = "docker-squash -t {fqdi} {fqdi}".format(**self.attributes)
+                run(cmd, echo=True)
 
-        run("docker push {fqdi}".format(**self.attributes), echo=True)
+            run("docker push {fqdi}".format(**self.attributes), echo=True)
 
-        currentimagedic = self.version_manager.get_latest_image_dict(datacenter=self.datacenter)
+            currentimagedic = self.version_manager.get_latest_image_dict(datacenter=self.datacenter)
 
-        currentimagedic['image'] = self.attributes['image']
-        currentimagedic['version'] = localimagedic['version']
-        currentimagedic['branch'] = localimagedic['branch']
-        currentimagedic['commit'] = localimagedic['commit']
-        currentimagedic['environment'] = self.attributes['cluster_config']['APP_DATACENTER']
-        currentimagedic['build_hostname'] = localimagedic['build_hostname']
-        currentimagedic['build_ip_address'] = localimagedic['build_ip_address']
+            currentimagedic['image'] = self.attributes['image']
+            currentimagedic['version'] = localimagedic['version']
+            currentimagedic['branch'] = localimagedic['branch']
+            currentimagedic['commit'] = localimagedic['commit']
+            currentimagedic['environment'] = self.attributes['cluster_config']['APP_DATACENTER']
+            currentimagedic['build_hostname'] = localimagedic['build_hostname']
+            currentimagedic['build_ip_address'] = localimagedic['build_ip_address']
 
-        self.version_manager.update_images_yaml(datacenter=self.datacenter, **currentimagedic)
+            self.version_manager.update_images_yaml(datacenter=self.datacenter, **currentimagedic)
+        except Exception as e:
+            logs = "Error in pushing docker image, {}".format(e)
+            self.logger.error(logs)
+            raise RuntimeError(logs)
 
     def _get_utcnow(self):
+        """
+        Return UTC time
+        :return:
+        """
         fmt = "%Y-%m-%dT%H-%M-%S.%f%Z"
         now_utc = datetime.now(timezone('UTC'))
         return now_utc.strftime(fmt)
 
     def _get_ip_address(self):
+        """
+        Returns IP address of host
+        :return:
+        """
         try:
             return '{}'.format(socket.gethostbyname(socket.gethostname()))
         except:
@@ -198,6 +238,10 @@ class Image(object):
         getoutput(cmd)
 
     def _get_git_commit(self):
+        """
+        Returns git commit id
+        :return:
+        """
         git_dir = os.path.join(self.app_main)
         repo = Repo(git_dir)
         try:
@@ -208,6 +252,10 @@ class Image(object):
         return commit
 
     def _get_git_branch(self):
+        """
+        Returns git branch name
+        :return:
+        """
         git_dir = os.path.join(self.app_main)
         repo = Repo(git_dir)
         try:
@@ -218,6 +266,10 @@ class Image(object):
         return branch
 
     def _get_version(self):
+        """
+        Returns image version of docker
+        :return:
+        """
         tags = self._get_tags()
         if tags is None:
             return None
@@ -230,6 +282,10 @@ class Image(object):
         return getoutput(cmd)
 
     def _get_tags(self):
+        """
+        Returns tags of docker image
+        :return:
+        """
         if self.attributes['registry_version'] == 'v1':
             return self._get_tags_v1()
         else:
@@ -237,6 +293,10 @@ class Image(object):
 
 
     def _docker_login(self):
+        """
+        Logins for docker registry respective to datacenter
+        :return:
+        """
         try:
 
             resource_group="{resourcegroup}-{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
@@ -254,6 +314,10 @@ class Image(object):
             self.logger.error("Error logging into docker using acr credentials: {0}.".format(err))
 
     def _get_tags_v2(self):
+        """
+        Returns docker tags version of docker container, reads the tags from docker registry respective to datacenter and image name
+        :return:
+        """
         try:
 
             resource_group="{resourcegroup}-{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
@@ -320,12 +384,15 @@ class Image(object):
                 return result
             else:
                 self.logger.exception("Error getting image detail from acr")
-            #response.raise_for_status()
         except Exception as err:
             self.logger.error("Error getting image detail from repo: {0}.".format(err))
             return None
 
     def _get_next_version(self):
+        """
+        Returns next version for the docker to be build
+        :return:
+        """
         v = self._get_version()
         if not v:
             return '0.0.1'
@@ -333,11 +400,14 @@ class Image(object):
             return self._get_local_next_version(v)
 
     def _get_local_next_version(self, v):
+        """
+        Return local docker version incase the version details not exist in docker registry
+        :param v:
+        :return:
+        """
         try:
 
             base_url= "unix:///var/run/docker.sock"
-            # base_url = "unix:/" + \
-            #            self.attributes['cluster_config']['DOCKER_SOCK']
 
             client = Client(base_url=base_url)
             images = client.images()

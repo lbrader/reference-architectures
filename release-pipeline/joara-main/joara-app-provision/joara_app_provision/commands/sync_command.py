@@ -5,8 +5,8 @@ import os
 
 
 def sync_image_add_subcommand(parser):
-    """Register sync subcommand
-
+    """
+    Register sync subcommand
     :param parser: argparse parser
     """
     subcommand = parser.add_parser('syncimage')

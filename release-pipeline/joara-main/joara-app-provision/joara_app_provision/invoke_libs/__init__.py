@@ -35,6 +35,11 @@ class Struct:
 
 
 def is_valid_ipv4_address(address):
+    """
+    Checks IP of DNS is valid
+    :param address:
+    :return:
+    """
     try:
         socket.inet_pton(socket.AF_INET, address)
     except AttributeError:  # no inet_pton here, sorry
@@ -49,6 +54,11 @@ def is_valid_ipv4_address(address):
     return True
 
 def resolvedns(dnshost):
+    """
+    Returns true if the DNS already exist
+    :param dnshost:
+    :return:
+    """
     try:
         logger.info("Checking DNS: {}".format(dnshost))
         answers = dns.resolver.query(dnshost, 'A')

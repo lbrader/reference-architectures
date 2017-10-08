@@ -5,6 +5,7 @@ from .commands.sync_command import sync_image_add_subcommand, sync_subcommand
 from .commands.jenkins_command import jenkins_add_subcommand, jenkins_subcommand
 from .commands.image_command import image_add_subcommand, image_subcommand
 from .commands.git_command import git_add_subcommand, git_subcommand
+from .commands.role_command import azure_add_subcommand, azure_subcommand
 from .commands.destroy_command import destroy_add_subcommand, destroy_subcommand
 import argparse
 import sys
@@ -27,7 +28,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Run script to provision JOARA-APP")
 
-    datacenters = ["jenkins","dev", "test", "prod", "all"]
+    datacenters = ["jenkins","dev", "test", "prod", "all","common"]
     parser.add_argument(
         "-d", "--datacenter",
         type=str,
@@ -46,16 +47,16 @@ def main():
     sync_image_add_subcommand(subparsers)
     image_add_subcommand(subparsers)
     destroy_add_subcommand(subparsers)
-
+    azure_add_subcommand(subparsers)
     args = parser.parse_args()
 
     if args.datacenter is None:
         raise RuntimeError('Please specify datacenter ({})'.format(datacenters))
 
 
-    elif args.cmd == 'bootstrap':
+    elif not args.datacenter in ["common"] and args.cmd == 'bootstrap':
         bootstrap_subcommand(args)
-    elif not args.datacenter in ["jenkins","all"] and args.cmd == 'image':
+    elif not args.datacenter in ["jenkins","all","common"] and args.cmd == 'image':
         image_subcommand(args)
     elif args.cmd == 'destroy':
         destroy_subcommand(args)
@@ -63,7 +64,9 @@ def main():
         jenkins_subcommand(args)
     elif args.cmd == 'gitconfigure':
         git_subcommand(args)
-    elif not args.datacenter in ["jenkins","all"] and  args.cmd == 'syncimage':
+    elif args.datacenter in ["common"]  and  args.cmd == 'azureconfigure':
+        azure_subcommand(args)
+    elif not args.datacenter in ["jenkins","all","common"] and  args.cmd == 'syncimage':
         sync_subcommand(args)
     else:
         logger.error('Unknown subcommand {}, use the correct datacenter'.format(args.cmd))

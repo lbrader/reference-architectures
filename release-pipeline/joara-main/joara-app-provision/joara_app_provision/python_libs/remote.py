@@ -7,6 +7,9 @@ import sys
 from ..log import logging
 
 class sshclient(object):
+    """
+    Manages to remote connections
+    """
     client = None
 
     def __init__(self, address, username):
@@ -49,14 +52,23 @@ class sshclient(object):
                 ziph.write(os.path.join(root, file))
 
     def zip(self,src, dst):
-        zf = zipfile.ZipFile("%s.zip" % (dst), "w", zipfile.ZIP_DEFLATED)
-        abs_src = os.path.abspath(src)
-        for dirname, subdirs, files in os.walk(src):
-            for filename in files:
-                absname = os.path.abspath(os.path.join(dirname, filename))
-                arcname = absname[len(abs_src) + 1:]
-                self.logger.debug('zipping {} as {}'.format (os.path.join(dirname, filename),arcname))
-                zf.write(absname, arcname)
-        zf.close()
+        """
+        Zips ansible code for jenkins configurations
+        :param src: source code directory
+        :param dst: location where to place the zip
+        :return:
+        """
+        try:
+            zf = zipfile.ZipFile("%s.zip" % (dst), "w", zipfile.ZIP_DEFLATED)
+            abs_src = os.path.abspath(src)
+            for dirname, subdirs, files in os.walk(src):
+                for filename in files:
+                    absname = os.path.abspath(os.path.join(dirname, filename))
+                    arcname = absname[len(abs_src) + 1:]
+                    self.logger.debug('zipping {} as {}'.format (os.path.join(dirname, filename),arcname))
+                    zf.write(absname, arcname)
+            zf.close()
+        except Exception as err:
+            self.logger.error("Exception: Ocurred when executing zip command {0}".format(err))
 
 

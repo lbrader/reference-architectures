@@ -4,6 +4,11 @@ from ..log import logging
 
 logger = logging.get_logger(__name__)
 def git_add_subcommand(parser):
+    """
+    Register git commands
+    :param parser: argparse parser
+    :return:
+    """
     subcommand = parser.add_parser('gitconfigure')
     subcommand.add_argument(
         '--group',
@@ -54,6 +59,7 @@ def git_add_subcommand(parser):
 def git_subcommand(args):
     if 'git' in args.group:
         if args.image:
+            ### configures git
             from_base.configure_git(args)
         else:
             logger.warn("Please provide a image name to configure in git")

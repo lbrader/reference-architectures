@@ -19,8 +19,15 @@ except ImportError:
 
 
 class KubeApi(object):
-
+    """
+    Kube API for managing pods and services
+    """
     def __init__(self, datacenter, **kwargs):
+        """
+        Initializes Kube context
+        :param datacenter: datacenter name
+        :param kwargs: Kube details
+        """
         self.logger = logging.get_logger(self.__class__.__name__)
         self.datacenter = datacenter
 
@@ -41,8 +48,11 @@ class KubeApi(object):
             self.version = kwargs['version']
             user = kwargs["user"]
         else:
-            img = Image(deploy=True, **kwargs)
-            self.version = img.current_version()
+            if 'task' in kwargs and kwargs['task'] == "rollback":
+                self.version = kwargs["version"]
+            else:
+                img = Image(deploy=True, **kwargs)
+                self.version = img.current_version()
             user = kwargs["cluster_config"]["APP_DATACENTER"]
 
         attributes = {
@@ -57,17 +67,23 @@ class KubeApi(object):
             "name": self.name,
             "registry": kwargs["app_docker_registry"],
             "deploy_app": deployment_app,
-            "service_app": service_app
+            "service_app": service_app,
+            "patch_app": patch_app
         }
         attributes.update(kwargs)
         self.attributes = attributes
         self.replicas = int(self.attributes["replicas"])
         self.deploy_app = render(attributes['deploy_app'], attributes)
         self.service_app = render(attributes['service_app'], attributes)
+        self.patch_app = render(attributes['patch_app'], attributes)
         self.logger.info("Image processing name:{image}, version:{version}".format(image=self.image,version=self.version))
         self.logger.warn("Image processing name:{image}, version:{version}".format(image=self.image, version=self.version))
 
     def _getreplica(self):
+        """
+        Gets the current replica of image pods
+        :return:
+        """
         count = 1
         try:
             resp = self.k8s_beta.list_namespaced_replica_set(namespace="default")
@@ -86,6 +102,10 @@ class KubeApi(object):
             return count
 
     def _get_running_imageversion(self):
+        """
+        Gets the current image verison of the image which is currently ruuning in kube
+        :return:
+        """
         try:
             resp = self.k8s_beta.list_namespaced_deployment(namespace="default")
             for i in resp.items:
@@ -105,6 +125,10 @@ class KubeApi(object):
             return "Not Found"
 
     def deploy(self):
+        """
+        Deploys image to kube
+        :return:
+        """
         try:
              dep = yaml.load(self.deploy_app)
              self.logger.debug(dep)
@@ -137,6 +161,10 @@ class KubeApi(object):
             sys.exit(1)
 
     def scale(self):
+        """
+        Scales image deployment count in Kube
+        :return:
+        """
         try:
              dep = yaml.load(self.deploy_app)
 
@@ -151,6 +179,10 @@ class KubeApi(object):
             sys.exit(1)
 
     def delete(self):
+        """
+        Deletes deployment in Kube
+        :return:
+        """
         try:
              if self._is_deployment_deployed():
                  resp=self.k8s_beta.delete_collection_namespaced_deployment(namespace="default")
@@ -172,6 +204,10 @@ class KubeApi(object):
 
 
     def patch(self):
+        """
+        Updates the version of image or change of parameters to image deployment in Kube
+        :return:
+        """
         try:
              dep = yaml.load(self.deploy_app)
              if self._is_deployment_deployed():
@@ -184,7 +220,28 @@ class KubeApi(object):
             self.logger.error("Error patching deployment details: {}. ".format(err))
             return False
 
+    def rollback(self):
+        """
+        Rollbacks the image version to specified number in Kube
+        :return:
+        """
+        try:
+             dep = yaml.load(self.patch_app)
+             if self._is_deployment_deployed():
+                 resp=self.k8s_beta.patch_namespaced_deployment(name=self.name, body=dep, namespace="default")
+                 self.logger.info("Rollback Deployment created.")
+                 self.logger.debug("Rollback Deployment created. status='{}' ".format(resp.status))
+             else:
+                 self.logger.info("Deployment {} not exist, Please deploy first ".format(self.name))
+        except Exception as err:
+            self.logger.error("Error rollback deployment details: {}. ".format(err))
+            return False
+
     def _is_deployment_deployed(self):
+        """
+        Checks and returns true if the image is already deployed
+        :return:
+        """
         try:
             resp = self.k8s_beta.list_namespaced_deployment(namespace="default")
             for i in resp.items:
@@ -211,6 +268,10 @@ class KubeApi(object):
             return False
 
     def getservice(self):
+        """
+        Returns the service IP of the image which is running in Kube
+        :return:
+        """
         try:
             resp = self.api.list_namespaced_service(namespace="default")
             self.logger.debug("Service details. status='{}' ".format(resp))
@@ -229,6 +290,10 @@ class KubeApi(object):
         return chain.from_iterable(imap(f, items))
 
     def _is_service_deployed(self):
+        """
+        Returns true if the service for the image is already deployed
+        :return:
+        """
         try:
             resp = self.api.list_namespaced_service(namespace="default")
             self.logger.debug("Service details. status='{}' ".format(resp))
@@ -288,3 +353,6 @@ spec:
   selector:
     app: {{ name }}
 """.strip()
+
+
+patch_app = """{"spec":{"template":{"spec":{"containers":[{"name":"{{ name }}","image":"{{ registry }}/{{ user }}/{{ image }}:{{ version }}"}]}}}}"""

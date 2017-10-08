@@ -15,10 +15,14 @@ import os
 from kubernetes import client, config
 from kubernetes.client import api_client
 from kubernetes.client.apis import core_v1_api
+import pickle
 from ...log import logging
 
 
 class CopyDocker(object):
+    """
+    Init class for copying docker from one datacenter to other datacenter and deploys to Kube
+    """
     def __init__(self, datancenter, **kwargs):
         self.attributes = {
             'user': 'dev',
@@ -32,6 +36,7 @@ class CopyDocker(object):
         self.from_datacenter = self.attributes["from_datacenter"]
         self.registry = kwargs["app_docker_registry"]
         self.resource_group_prefix = self.attributes['cluster_config']['RESOURCE_GROUP_PREFIX']
+        self.resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
 
         try:
             if ( 'AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ) :
@@ -41,11 +46,16 @@ class CopyDocker(object):
                     'client_secret': os.environ['AZURE_CLIENT_SECRET'],
                     'tenant_id': os.environ['AZURE_TENANT_ID']})
             else:
-                self.__dict__.update({
-                    'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
-                    'client_id': self.cluster_config['AZURE_CLIENT_ID'],
-                    'client_secret': self.cluster_config['AZURE_CLIENT_SECRET'],
-                    'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
+                cuurent_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                                                      "{}.pickle".format(self.resource_group))
+                read_from_cache = os.path.isfile(cuurent_token_filename)
+
+                if (read_from_cache):
+                    azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
+                    self.client_id = azure_credentital['AZURE_CLIENT_ID']
+                    self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
+                    self.tenant_id = azure_credentital['AZURE_TENANT_ID']
+                    self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
 
                 os.environ['AZURE_CLIENT_ID'] = self.client_id
                 os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
@@ -101,6 +111,11 @@ class CopyDocker(object):
         os.chdir(directory)
 
     def copyfromstroage(self, datacenter='local'):
+        """
+        Copies images version yml from stroage to local
+        :param datacenter: name of datacenter
+        :return:
+        """
         ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
         try:
             if datacenter != 'local' :
@@ -125,6 +140,10 @@ class CopyDocker(object):
             pass
 
     def copy(self):
+        """
+        Copy all docker which is different in version from one datacenter to other
+        :return:
+        """
         # procs = 3
 
         self.copyfromstroage(self.from_datacenter)
@@ -182,6 +201,15 @@ class CopyDocker(object):
 
 
     def syncdocker(self, from_registry, from_user, image, version, return_dict):
+        """
+        Syncs docker version from one docker registry to other docker registry datacenter and deploys to Kube
+        :param from_registry: from which docker registry to copy
+        :param from_user: dcker registry user
+        :param image: name of the image to copy
+        :param version: version of image to copy
+        :param return_dict: returns the stauts of copy
+        :return:
+        """
         fqdi = "{registry}/{user}/{image}:{version}".format(
             registry=from_registry,
             user=from_user,

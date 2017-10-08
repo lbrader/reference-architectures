@@ -1,5 +1,5 @@
 image: redis
-name: azure-vote-back
+name: azure-voteo-back
 port: 6379
 count: 1
 type: backend

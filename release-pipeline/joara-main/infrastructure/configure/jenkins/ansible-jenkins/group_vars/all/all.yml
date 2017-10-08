@@ -14,10 +14,29 @@ jenkins_storage_account: "{{ jenkins_storage_account }}"
 resource_group: "{{ resource_group }}"
 
 azure_credentials_id: "{{ azure_credentials_id }}"
-subscriptionId: "{{ subscriptionId }}"
-clientId: "{{ clientId }}"
-clientSecret: "{{ clientSecret }}"
-tenant: "{{ tenant }}"
+
+
+dev_subscriptionId: "{{ dev_subscriptionId }}"
+dev_clientId: "{{ dev_clientId }}"
+dev_clientSecret: "{{ dev_clientSecret }}"
+dev_tenant: "{{ dev_tenant }}"
+
+test_subscriptionId: "{{ test_subscriptionId }}"
+test_clientId: "{{ test_clientId }}"
+test_clientSecret: "{{ test_clientSecret }}"
+test_tenant: "{{ test_tenant }}"
+
+
+prod_subscriptionId: "{{ prod_subscriptionId }}"
+prod_clientId: "{{ prod_clientId }}"
+prod_clientSecret: "{{ prod_clientSecret }}"
+prod_tenant: "{{ prod_tenant }}"
+
+jenkins_subscriptionId: "{{ jenkins_subscriptionId }}"
+jenkins_clientId: "{{ jenkins_clientId }}"
+jenkins_clientSecret: "{{ jenkins_clientSecret }}"
+jenkins_tenant: "{{ jenkins_tenant }}"
+
 location: "{{ location }}"
 
 

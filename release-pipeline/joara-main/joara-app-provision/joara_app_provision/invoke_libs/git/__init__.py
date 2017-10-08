@@ -15,8 +15,15 @@ except ImportError:
 
 
 class GitHubApi(object):
+    """
+    GitHub API to manage repository and its permissions
+    """
 
     def __init__(self, **kwargs):
+        """
+        Init Github API
+        :param kwargs: param reponame, github details
+        """
         self.logger = logging.get_logger(self.__class__.__name__)
         self.token = kwargs['cluster_config']['GIT_HUB_TOKEN']
         self.orgid = kwargs['cluster_config']['GIT_HUB_ORG_ID']
@@ -39,7 +46,6 @@ class GitHubApi(object):
         self.attrs['git_repo_name'] = self.repo
 
 
-        #print(self.attrs)
         self.app_render()
 
         self.json_webhook_hook = render(self.attributes['webhook_hook'], self.attributes)
@@ -47,27 +53,45 @@ class GitHubApi(object):
         self.github = Github(self.token)
 
     def app_render(self):
+        """
+        Replaces templates with github repo details
+        :return:
+        """
         list_files = ['Jenkinsfile','conf.yml','backend.yml']
         for files in list_files:
             self.app_render_template(self.find(files), files)
 
     def app_render_template(self, path, file):
+        """
+        Replaces templates with github repo details
+        :param path: Path of template
+        :param file: Path of file to replace the template values
+        :return:
+        """
         if path and os.path.exists(os.path.join(path, file)):
             env = Environment(loader=FileSystemLoader(os.path.join(path)))
             template = env.get_template(file)
             output_from_parsed_template = template.render(self.attrs)
-            #print(output_from_parsed_template)
-           # print(os.path.join(path, file))
-            #os.rmdir(os.path.join(path, file))
             with open(os.path.join(path, file), "w") as fh:
                 fh.write(output_from_parsed_template)
 
     def find(self,name):
+        """
+        Finds the file path and returns the path of template file
+        :param name:
+        :return: file path of template
+        """
         for root, dirs, files in os.walk(os.getcwd()):
             if name in files:
                 return os.path.join(root)
 
     def create_repo(self,name, dir=""):
+      """
+      Creates github repo, adds branch, adds jenkins webhook and protects the branch
+      :param name: name of the repo
+      :param dir: code directory to be used for repo
+      :return: status of git configuration
+      """
       try:
 
         repo_exist = False
@@ -129,20 +153,36 @@ class GitHubApi(object):
         else:
             self.logger.info("Repository {} pre-condition already met".format(name))
       except Exception as err:
-            self.logger.exception("Exception: {0}".format(err))
+            self.logger.exception("Error: Creating github repo got an Exception: {0}".format(err))
             sys.exit(1)
 
 
 
     def delete_repo(self, name):
-        self.logger.info("Deleting repository:{}".format(name))
-        self.github.get_organization(self.orgid).get_repo(name).delete()
-        self.logger.info("Completed deleting repository:{}".format(name))
+        """
+        Deletes github repo
+        :param name: repo name
+        :return:
+        """
+        try:
+            self.logger.info("Deleting repository:{}".format(name))
+            self.github.get_organization(self.orgid).get_repo(name).delete()
+            self.logger.info("Completed deleting repository:{}".format(name))
+        except Exception as err:
+            self.logger.error('ERROR: Deleting git repo got an Exception: {}'.format(err))
 
     def create_repo_hook(self, name):
-        self.logger.info("Creating webhook for repository:{}".format(name))
-        self.github.get_organization(self.orgid).get_repo(name).create_hook("jenkins", {"jenkins_hook_url": "http://{host}/github-webhook/".format(host=self.jenkinshost)})
-        self.logger.info("Completed creating webhook for repository:{}".format(name))
+        """
+        Creates jenkins webhook for github repo
+        :param name: repo name
+        :return:
+        """
+        try:
+            self.logger.info("Creating webhook for repository:{}".format(name))
+            self.github.get_organization(self.orgid).get_repo(name).create_hook("jenkins", {"jenkins_hook_url": "http://{host}/github-webhook/".format(host=self.jenkinshost)})
+            self.logger.info("Completed creating webhook for repository:{}".format(name))
+        except Exception as err:
+            self.logger.error('ERROR: Creating git hub webhook got an Exception: {}'.format(err))
 
     def make_api_headers(self):
         """
@@ -162,19 +202,34 @@ class GitHubApi(object):
         return '/'.join(('https://api.github.com',*args))
 
     def set_protection(self,name):
-        base_branches = ['master', 'dev', 'test']
-        for branch in base_branches:
-            url = self.make_api_url('repos', self.orgid, name, 'branches', branch, 'protection')
-            self.logger.debug(self.json_branch_protect)
-            self.logger.info("Protecting branch:{}".format(branch))
-            self.logger.info(str(requests.put(url, headers=self.make_api_headers(), json=json.loads(self.json_branch_protect))))
+        """
+        Sets branch protection for the github repo
+        :param name:
+        :return:
+        """
+        try:
+            base_branches = ['master', 'dev', 'test']
+            for branch in base_branches:
+                url = self.make_api_url('repos', self.orgid, name, 'branches', branch, 'protection')
+                self.logger.debug(self.json_branch_protect)
+                self.logger.info("Protecting branch:{}".format(branch))
+                self.logger.info(str(requests.put(url, headers=self.make_api_headers(), json=json.loads(self.json_branch_protect))))
+        except Exception as err:
+            self.logger.error('ERROR: Setting github branch protection got an Exception: {}'.format(err))
 
     def create_org_hook(self):
-        url = self.make_api_url('orgs', self.orgid, 'hooks')
-        self.logger.info("giturl:{}".format(url))
-        self.logger.info("jenkinsurl:{}".format(self.attributes["jenkins_hook_url"]))
-        self.logger.debug(self.json_webhook_hook)
-        self.logger.info(str(requests.post(url, headers=self.make_api_headers(), json=json.loads(self.json_webhook_hook))))
+        """
+        Creates jenkins webhook for organization
+        :return:
+        """
+        try:
+            url = self.make_api_url('orgs', self.orgid, 'hooks')
+            self.logger.info("giturl:{}".format(url))
+            self.logger.info("jenkinsurl:{}".format(self.attributes["jenkins_hook_url"]))
+            self.logger.debug(self.json_webhook_hook)
+            self.logger.info(str(requests.post(url, headers=self.make_api_headers(), json=json.loads(self.json_webhook_hook))))
+        except Exception as err:
+            self.logger.error('ERROR: Creating org web hook got an Exception: {}'.format(err))
 
 branch_protect="""{
   "required_status_checks": null,

@@ -8,6 +8,11 @@ import sys
 logger = logging.get_logger(__name__)
 
 def image_add_subcommand(parser):
+    """
+    Registers image command
+    :param parser: argparse parser
+    :return:
+    """
     subcommand = parser.add_parser('image')
 
     subcommand.add_argument(
@@ -22,6 +27,7 @@ def image_add_subcommand(parser):
             'patch',
             'delete',
             'get',
+            'rollback',
             'getservice'
         ],
         help="Which action to be performed on the image "
@@ -46,7 +52,7 @@ def image_add_subcommand(parser):
         '--version',
         type=str,
         nargs='?',
-        help="How many replicas to scale")
+        help="Version to deploy")
 
     subcommand.add_argument('--verbose', required=False, action='count', default=True)
 
@@ -54,6 +60,7 @@ def image_add_subcommand(parser):
 
 
 def image_subcommand(args):
+    ### Action on image
     for image in args.images:
         module = os.path.join('infrastructure', 'images', 'run')
         if args.task in ["build", "push", "all"]:

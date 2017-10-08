@@ -9,12 +9,20 @@ from ..log import logging
 
 
 class VersionManager(object):
+    """
+    Manages version of the docker image respective to datacenter in an yml file
+    """
     def __init__(self, **kwargs):
         self.__dict__ = kwargs
         self.logger = logging.get_logger(self.__class__.__name__)
 
 
     def get_latest_image_dict(self, datacenter='local'):
+        """
+        Returns the current details of image in dict by reading the yml file from storage
+        :param datacenter: name of datacenter
+        :return: dict with image meta details
+        """
         ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
         fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
         try:
@@ -59,6 +67,12 @@ class VersionManager(object):
 
 
     def update_images_yaml(self, datacenter='local', **kwdic):
+        """
+        Updates the image meta information in yml file and uploads to stroage
+        :param datacenter:
+        :param kwdic:
+        :return:
+        """
         fnamelatest = os.path.join(self.app_main, 'infrastructure', 'images_version',
                                    'images_{}.yml'.format(datacenter))
         with open(fnamelatest) as f:
@@ -80,6 +94,11 @@ class VersionManager(object):
             self.logger.info("Update to images version yml completed for datacenter {datacenter}".format(datacenter=datacenter))
 
     def get_images_list(self, datacenter='local'):
+        """
+        Return the list of images in datacenter
+        :param datacenter:
+        :return: list of images and meta details
+        """
         try:
             ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
             fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
@@ -94,6 +113,12 @@ class VersionManager(object):
             sys.exit(1)
 
     def get_latest_image_sync_dict(self, image, datacenter='local'):
+        """
+        Returns the image meta details for an image
+        :param image: image name
+        :param datacenter:
+        :return: dict with images meta details
+        """
         ifolderpath = os.path.join(self.app_main, 'infrastructure', 'images_version')
         self.fnamelatest = os.path.join(ifolderpath, 'images_{}.yml'.format(datacenter))
         with open(self.fnamelatest) as f:

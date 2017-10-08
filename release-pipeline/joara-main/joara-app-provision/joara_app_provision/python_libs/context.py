@@ -9,10 +9,11 @@ import subprocess
 from azure.common.credentials import ServicePrincipalCredentials
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.resource.subscriptions.subscription_client import SubscriptionClient
-from azure.cli.core._profile import Profile
+from azure.cli.command_modules.role.custom import create_service_principal_for_rbac, create_role_assignment, \
+    delete_application
 from azure.mgmt.resource.resources.models import DeploymentMode
 from msrestazure.azure_exceptions import CloudError
-from ..invoke_libs import render,resolvedns
+from ..invoke_libs import render, resolvedns
 import json
 from . import remote
 import zipfile
@@ -29,19 +30,41 @@ from requests import post, put, get
 from jinja2 import Environment, FileSystemLoader
 import adal
 import re
+import pickle
+import time
+from azure.keyvault import KeyVaultId
+from azure.keyvault import KeyVaultClient
+from azure.graphrbac import GraphRbacManagementClient
+from azure.keyvault import KeyVaultClient
+from azure.mgmt.keyvault import KeyVaultManagementClient
+from azure.cli.core._profile import Profile
+
 
 class Context(object):
+    """
+    Core init conext for the joara, all command and actions are initialized from here. Manages credentials and root path for caller functions
+    """
     def __init__(self, **kwargs):
-
+        """
+        Init conext to maanging entire joara app
+        :param kwargs:
+        """
         try:
             self.__dict__ = kwargs
             self.logger = logging.get_logger(self.__class__.__name__)
             self.file = os.path.abspath(self.file)
             self.script = os.path.basename(self.file)
+            self.attributes = {}
+            self.attributes.update(kwargs)
+            if 'group' in kwargs:
+                self.group = self.attributes['group']
+            else:
+                self.group = ""
             self.cluster_config = get_cluster_config(self.datacenter)
 
             if not 'RESOURCE_GROUP_PREFIX' in self.cluster_config or not self.cluster_config['RESOURCE_GROUP_PREFIX']:
-                self.logger.error("Exception: Resource group prefix can't be empty, please update RESOURCE_GROUP_PREFIX in clusters.ini file under root project directory")
+                self.logger.error(
+                    "Exception: Resource group prefix can't be empty, please update RESOURCE_GROUP_PREFIX in clusters.ini file under root project directory")
                 sys.exit(1)
 
             if len(self.cluster_config['RESOURCE_GROUP_PREFIX']) < 5:
@@ -53,98 +76,362 @@ class Context(object):
                 'project_path': os.path.dirname(self.file),
                 'app_datacenter': self.datacenter,
                 'app_main': kwargs.get('app_main', self.cluster_config['APP_MAIN']),
-                'app_docker_registry': "{}acr{}.azurecr.io".format(self.cluster_config['RESOURCE_GROUP_PREFIX'],self.datacenter),
+                'app_docker_registry': "{}acr{}.azurecr.io".format(self.cluster_config['RESOURCE_GROUP_PREFIX'],
+                                                                   self.datacenter),
                 "datacenter": self.datacenter
             })
-
-            try:
-                if ('AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
-                    self.__dict__.update({
-                        'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
-                        'client_id': os.environ['AZURE_CLIENT_ID'],
-                        'client_secret': os.environ['AZURE_CLIENT_SECRET'],
-                        'tenant_id': os.environ['AZURE_TENANT_ID']})
-                else:
-                    self.__dict__.update({
-                        'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
-                        'client_id': self.cluster_config['AZURE_CLIENT_ID'],
-                        'client_secret': self.cluster_config['AZURE_CLIENT_SECRET'],
-                        'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
-
-                    os.environ['AZURE_CLIENT_ID'] = self.client_id
-                    os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
-                    os.environ['AZURE_TENANT_ID'] = self.tenant_id
-                    os.environ['AZURE_SUBSCRIPTION_ID'] = self.subscription_id
-            except Exception as e:
-                logs = " Please update your azure credentials under culsters.ini or to environment variables , {}".format(e)
-                self.logger.error(logs)
-                raise RuntimeError(logs)
-
-            if 'SSH_KEY_FILE' in self.cluster_config:
-                self.__dict__.update({
-                    'ssh_key_file': "{}{}".format(self.app_main, self.cluster_config['SSH_KEY_FILE'])})
-            else:
-                self.__dict__.update({
-                    'ssh_key_file': ""})
-
             self.__dict__.update({
                 'resource_group_prefix': self.cluster_config['RESOURCE_GROUP_PREFIX'],
                 'location': self.cluster_config['LOCATION'],
                 'user': self.datacenter})
 
-            os.environ['RESOURCE_GROUP_PREFIX'] = self.resource_group_prefix
+            if self.group == "azure-setup":
+                try:
+                    if ('AZURE_SUBSCRIPTION_ID' in os.environ and 'AZURE_TENANT_ID' in os.environ):
+                        self.__dict__.update({'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
+                                              'tenant_id': os.environ['AZURE_TENANT_ID']})
+                    else:
+                        self.__dict__.update({'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
+                                              'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
 
-            self.logger.info("app_datacenter: {0.app_datacenter} ".format(self))
-            self.resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
+                except Exception as e:
+                    logs = "Please update your azure subscription id under culsters.ini or to environment variables , {}".format(
+                        e)
+                    self.logger.error(logs)
+                    raise RuntimeError(logs)
 
-
-            self.credentials = ServicePrincipalCredentials(
-                client_id=self.client_id,
-                secret=self.client_secret,
-                tenant=self.tenant_id
-            )
-
-            supported_regions = ["eastus", "westcentralus"]
-            if not self.location in supported_regions:
-                self.logger.error("Exception: Service not exist in the specified location {0}".format(self.location))
-                self.logger.warn("Supported locations {0}".format(str(supported_regions)))
-                sys.exit(1)
-            else:
-                self.logger.info("Using location: {0}".format(self.location))
-
-            self.logger.info("Using resource group: {0.resource_group_prefix}-{0.datacenter}".format(self))
-            if not self._checkazurelocation(self.location):
-                self.logger.error("Exception: Specified location {0} not exit under your subscription".format(self.location))
-                sys.exit(1)
-            else:
-                self.logger.info("Using location: {0}".format(self.location))
-
-            try:
-                profile = Profile()
-                subscriptions = profile.find_subscriptions_on_login(
-                    False,
-                    self.client_id,
-                    self.client_secret,
+                self.profile = Profile()
+                subscriptions = self.profile.find_subscriptions_on_login(
                     True,
+                    None,
+                    None,
+                    None,
                     self.tenant_id,
                     allow_no_subscriptions=False)
-                subscription_name = json.loads(json.dumps(profile.get_subscription(self.subscription_id)))["name"]
-                self.subscription_name =  re.sub('\W+', '', subscription_name).lower()
-            except Exception as err:
-                self.logger.error("Exception: Unable to get subscription details for the credentials provided {0}".format(err))
-                sys.exit(1)
+                all_subscriptions = list(subscriptions)
+                self.current_user_id = all_subscriptions[0]["user"]["name"]
+                self.logger.info("Logged in user id {0}".format(self.current_user_id))
+                self.profile.set_active_subscription(self.subscription_id)
+                cred, subscription_id, _ = self.profile.get_login_credentials()
+                self.credentials = cred
+                self.client = ResourceManagementClient(self.credentials, self.subscription_id)
+            else:
+                self.resource_group = "{}-{}".format(self.resource_group_prefix, self.datacenter)
+                try:
+                    if (
+                                            'AZURE_CLIENT_ID' in os.environ and 'AZURE_CLIENT_SECRET' in os.environ and 'AZURE_TENANT_ID' in os.environ and 'AZURE_SUBSCRIPTION_ID' in os.environ):
+                        self.__dict__.update({
+                            'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
+                            'client_id': os.environ['AZURE_CLIENT_ID'],
+                            'client_secret': os.environ['AZURE_CLIENT_SECRET'],
+                            'tenant_id': os.environ['AZURE_TENANT_ID']})
 
-            validate_ssh_key(self.ssh_key_file)
+                        self.credentials = ServicePrincipalCredentials(
+                            client_id=self.client_id,
+                            secret=self.client_secret,
+                            tenant=self.tenant_id
+                        )
+                    else:
+                        try:
+                            if ('AZURE_SUBSCRIPTION_ID' in os.environ and 'AZURE_TENANT_ID' in os.environ):
+                                self.__dict__.update({'subscription_id': os.environ['AZURE_SUBSCRIPTION_ID'],
+                                                      'tenant_id': os.environ['AZURE_TENANT_ID']})
+                            else:
+                                self.__dict__.update({'subscription_id': self.cluster_config['AZURE_SUBSCRIPTION_ID'],
+                                                      'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
 
-            self.client = ResourceManagementClient(self.credentials, self.subscription_id)
+                        except Exception as e:
+                            logs = "Please update your azure subscription id under culsters.ini or to environment variables , {}".format(
+                                e)
+                            self.logger.error(logs)
+                            raise RuntimeError(logs)
 
+                        os.makedirs(os.path.join(os.path.expanduser("~"), ".joara"), exist_ok=True)
+                        cuurent_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                                                              "{}.pickle".format(self.resource_group))
+                        read_from_cache = os.path.isfile(cuurent_token_filename)
+
+                        if (read_from_cache):
+                            azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
+                            self.client_id = azure_credentital['AZURE_CLIENT_ID']
+                            self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
+                            self.tenant_id = azure_credentital['AZURE_TENANT_ID']
+                            self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
+
+                        else:
+                            profile = Profile()
+                            subscriptions = profile.find_subscriptions_on_login(
+                                True,
+                                None,
+                                None,
+                                None,
+                                self.tenant_id,
+                                allow_no_subscriptions=False)
+                            profile.set_active_subscription(self.subscription_id)
+
+                            credkv, subscription_id, _ = profile.get_login_credentials(
+                                resource='https://vault.azure.net')
+
+                            client_kv = KeyVaultClient(credkv)
+                            dc_list = ["dev", "test", "prod", "jenkins"]
+                            for dc in dc_list:
+                                resource_group = "{}-{}".format(self.resource_group_prefix, dc)
+                                token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                                                              "{}.pickle".format(resource_group))
+                                vault_uri = "https://{}-kv.vault.azure.net".format(resource_group)
+                                secret_name_list = ["AZURECLIENTID", "AZURECLIENTSECRET", "AZURETENANTID",
+                                                    "AZURESUBSCRIPTIONID"]
+                                azure_srvp_credentital = {}
+                                for secret_name in secret_name_list:
+                                    output_secret = client_kv.get_secret(vault_uri, secret_name, secret_version='')
+                                    try:
+                                        if secret_name == "AZURECLIENTID":
+                                            azure_srvp_credentital["AZURE_CLIENT_ID"] = output_secret.value
+                                        elif secret_name == "AZURECLIENTSECRET":
+                                            azure_srvp_credentital["AZURE_CLIENT_SECRET"] = output_secret.value
+                                        elif secret_name == "AZURETENANTID":
+                                            azure_srvp_credentital["AZURE_TENANT_ID"] = output_secret.value
+                                        elif secret_name == "AZURESUBSCRIPTIONID":
+                                            azure_srvp_credentital["AZURE_SUBSCRIPTION_ID"] = output_secret.value
+                                        else:
+                                            self.logger.error(
+                                                "No service principle keys found for {}".format(secret_name))
+                                            sys.exit(1)
+                                    except Exception as e:
+                                        logs = "Unable to get secret tokens , {}".format(e)
+                                        self.logger.error(logs)
+                                        raise RuntimeError(logs)
+                                pickle.dump(azure_srvp_credentital, open(token_filename, "wb"))
+
+                        azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
+                        self.client_id = azure_credentital['AZURE_CLIENT_ID']
+                        self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
+                        self.tenant_id = azure_credentital['AZURE_TENANT_ID']
+                        self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
+
+                        # os.environ['AZURE_CLIENT_ID'] = self.client_id
+                        # os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
+                        # os.environ['AZURE_TENANT_ID'] = self.tenant_id
+                        # os.environ['AZURE_SUBSCRIPTION_ID'] = self.subscription_id
+
+                        self.credentials = ServicePrincipalCredentials(
+                            client_id=self.client_id,
+                            secret=self.client_secret,
+                            tenant=self.tenant_id
+                        )
+                except Exception as e:
+                    logs = "Unable to authenticate, please update your azure credentials under culsters.ini or to environment variables , {}".format(
+                        e)
+                    self.logger.error(logs)
+                    raise RuntimeError(logs)
+
+                if 'SSH_KEY_FILE' in self.cluster_config:
+                    self.__dict__.update({
+                        'ssh_key_file': "{}{}".format(self.app_main, self.cluster_config['SSH_KEY_FILE'])})
+                else:
+                    self.__dict__.update({
+                        'ssh_key_file': ""})
+
+                os.environ['RESOURCE_GROUP_PREFIX'] = self.resource_group_prefix
+
+                self.logger.info("app_datacenter: {0.app_datacenter} ".format(self))
+
+                validate_ssh_key(self.ssh_key_file)
+
+                self.client = ResourceManagementClient(self.credentials, self.subscription_id)
+                self.check_location()
             self._app_project_path()
 
         except Exception as err:
             self.logger.error("Exception: In Initializing the context {0}".format(err))
             sys.exit(1)
 
-    def _checkazurelocation(self,name):
+    def check_location(self):
+        """
+        Checks azure resource location and exit program if its a not a valid location
+        :return:
+        """
+        supported_regions = ["eastus", "westcentralus"]
+        if not self.location in supported_regions:
+            self.logger.error("Exception: Service not exist in the specified location {0}".format(self.location))
+            self.logger.warn("Supported locations {0}".format(str(supported_regions)))
+            sys.exit(1)
+        else:
+            self.logger.info("Using location: {0}".format(self.location))
+
+        self.logger.info("Using resource group: {0.resource_group_prefix}-{0.datacenter}".format(self))
+        if not self._checkazurelocation(self.location):
+            self.logger.error(
+                "Exception: Specified location {0} not exit under your subscription".format(self.location))
+            sys.exit(1)
+        else:
+            self.logger.info("Using location: {0}".format(self.location))
+
+    def configure_azure(self):
+        """
+        Core to configure azure with creation of service principle, keyvalut and role assigment - works only for owner with administrative privileges
+        :return:
+        """
+        self.logger.info("Started azure configure")
+        try:
+            self.check_location()
+            credkv, subscription_id, _ = self.profile.get_login_credentials(resource='https://vault.azure.net')
+            credgm, subscription_id, _ = self.profile.get_login_credentials(resource='https://graph.windows.net')
+            client_kv = KeyVaultClient(credkv)
+            resource_group_name = self.attributes['resourcegroup']
+            dc_list = ["dev", "test", "prod", "jenkins"]
+            graphrbac_client = GraphRbacManagementClient(
+                credgm,
+                self.tenant_id
+            )
+            user = graphrbac_client.users.get(self.attributes['useremail'])
+            current_user = graphrbac_client.users.get(self.current_user_id)
+            self.logger.info("Access granting to user id {0}".format(user.object_id))
+            for dc in dc_list:
+                client = ResourceManagementClient(self.credentials, subscription_id)
+                resource_group = "{}-{}".format(resource_group_name, dc)
+                self.logger.info("Resource group creation started {0}".format(resource_group))
+                try:
+                    client.resource_groups.create_or_update(
+                        resource_group,
+                        {
+                            'location': self.location
+                        }
+                    )
+
+                    self.logger.info("Resource group creation completed {0}".format(resource_group))
+                except Exception as err:
+                    self.logger.error(
+                        "Exception: Resource group creation failed for datacenter: {}, {}".format(dc, err))
+                    sys.exit(1)
+            for dc in dc_list:
+                resource_group = "{}-{}".format(resource_group_name, dc)
+                kv_client = KeyVaultManagementClient(self.credentials, subscription_id)
+                self.logger.info("Key valut creation strated for datacenter: {0}".format(dc))
+                try:
+                    vault = kv_client.vaults.create_or_update(
+                        resource_group,
+                        "{}-kv".format(resource_group),
+                        {
+                            'location': self.location,
+                            'properties': {
+                                'sku': {
+                                    'name': 'standard'
+                                },
+                                'tenant_id': self.tenant_id,
+                                'access_policies': [{
+                                    'tenant_id': self.tenant_id,
+                                    'object_id': user.object_id,
+                                    'permissions': {
+                                        'keys': ['all'],
+                                        'secrets': ['all']
+                                    }
+                                },
+                                    {
+                                        'tenant_id': self.tenant_id,
+                                        'object_id': current_user.object_id,
+                                        'permissions': {
+                                            'keys': ['all'],
+                                            'secrets': ['all']
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    )
+                    self.logger.info("Key valut creation compelted for datacenter: {0}".format(dc))
+                except Exception as err:
+                    self.logger.error("Exception: Key valut creation failed for datacenter: {}, {}".format(dc, err))
+                    sys.exit(1)
+                app_name = resource_group
+                self.logger.info("Service principle creation started for datacenter: {0}".format(dc))
+                try:
+                    json_srvp = create_service_principal_for_rbac(name=app_name, role="owner", show_auth_for_sdk=False)
+                    self.logger.info("Service principle creation completed for datacenter: {0}".format(dc))
+                except Exception as err:
+                    self.logger.error(
+                        "Exception: Service principle creation failed for datacenter: {}, {}".format(dc, err))
+                    sys.exit(1)
+
+                self.logger.info("Key valut secret creation started for datacenter: {0}".format(dc))
+
+                try:
+                    # Create a secret
+                    secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'AZURECLIENTID',
+                                                         json_srvp["appId"])
+                    secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
+
+                    # Create a secret
+                    secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'AZURECLIENTSECRET',
+                                                         json_srvp["password"])
+                    secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
+
+                    # Create a secret
+                    secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'AZURETENANTID',
+                                                         json_srvp["tenant"])
+                    secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
+
+                    # Create a secret
+                    secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'AZURESUBSCRIPTIONID',
+                                                         subscription_id)
+                    secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
+                    self.logger.info("Key valut secret creation completed for datacenter: {0}".format(dc))
+                except Exception as err:
+                    self.logger.error(
+                        "Exception: Key valut secret creation failed for datacenter: {}, {}".format(dc, err))
+                    sys.exit(1)
+
+                _RETRY_TIMES = 36
+                for l in range(0, _RETRY_TIMES):
+                    try:
+
+                        if dc == "test":
+                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                                                            resource_group_name=resource_group)
+                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                                                            resource_group_name="{}-{}".format(resource_group_name,
+                                                                                               "dev"))
+                        elif dc == "prod":
+                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                                                            resource_group_name=resource_group)
+                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                                                            resource_group_name="{}-{}".format(resource_group_name,
+                                                                                               "test"))
+                        else:
+                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                                                            resource_group_name=resource_group)
+
+                        output = create_role_assignment(role="owner", assignee=self.attributes['useremail'],
+                                                        resource_group_name=resource_group)
+                        break
+                    except Exception as ex:  # pylint: disable=broad-except
+                        if l < _RETRY_TIMES and (' does not reference ' in str(ex) or ' does not exist ' in str(ex)):
+                            time.sleep(5)
+                            self.logger.warning('Retrying role assignment: %s/%s', l + 1, _RETRY_TIMES)
+                        else:
+                            self.logger.error(
+                                "Creating role assignment principal failed for appid '%s'. Trace followed:\n%s",
+                                json_srvp["name"],
+                                ex.response.headers if hasattr(ex, 'response') else ex)  # pylint: disable=no-member
+                            raise
+
+                self.logger.info("Compelted for datacenter: {0}".format(dc))
+            self.logger.info("Compelted azure configure")
+        except Exception as err:
+            self.logger.error("Exception: Arure configuration failed, {0}".format(err))
+            sys.exit(1)
+
+    def run_win_cmd(self, cmd):
+        result = []
+        print(cmd)
+        subprocess.Popen(cmd, shell=True)
+
+    def _checkazurelocation(self, name):
+        """
+        Returns true the location used by the user is valid
+        :param name:
+        :return:
+        """
         try:
             result = list(SubscriptionClient(self.credentials).subscriptions.list_locations(self.subscription_id))
             for l in result:
@@ -199,13 +486,17 @@ class Context(object):
             self.logger.debug(cmd)
         check_call(cmd, shell=True)
 
-
-
     def configure_jenkins(self):
+        """
+        Configures jenkins with pre and post. Pre gets the password for authenticating to jenkins and post configures the entire jenkins
+        :return:
+        """
         try:
             if self.group == "jenkins":
-                self.sshclient = remote.sshclient("{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(resourcegroup=self.resource_group_prefix,
-                    location=self.location), "{}jenkins".format(self.resource_group_prefix))
+                self.sshclient = remote.sshclient(
+                    "{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(
+                        resourcegroup=self.resource_group_prefix,
+                        location=self.location), "{}jenkins".format(self.resource_group_prefix))
 
                 self.attrs = {}
                 ## Git configuration
@@ -219,12 +510,22 @@ class Context(object):
                     "eastus": "East US"
                 }
 
-                ## Azure configuration
+                ## Azure configuration - dev
                 self.attrs['azure_credentials_id'] = self.cluster_config['JENKINS_AZURE_CREDENTIALS_ID']
-                self.attrs['subscriptionId'] = self.subscription_id
-                self.attrs['clientId'] = self.client_id
-                self.attrs['clientSecret'] = self.client_secret
-                self.attrs['tenant'] = self.tenant_id
+
+                dc_list = ["dev", "test", "prod", "jenkins"]
+                for dc in dc_list:
+                    resource_group = "{}-{}".format(self.resource_group_prefix, dc)
+                    token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                                                  "{}.pickle".format(resource_group))
+
+                    azure_credentital = pickle.load(open(token_filename, "rb"))
+                    self.attrs['{}_subscriptionId'.format(dc)] = azure_credentital['AZURE_SUBSCRIPTION_ID']
+                    self.attrs['{}_clientId'.format(dc)] = azure_credentital['AZURE_CLIENT_ID']
+                    self.attrs['{}_clientSecret'.format(dc)] = azure_credentital['AZURE_CLIENT_SECRET']
+                    self.attrs['{}_tenant'.format(dc)] = azure_credentital['AZURE_TENANT_ID']
+
+                
                 self.attrs['location'] = self.regionmap[self.location]
 
                 ## Jenkins VM slave
@@ -251,7 +552,7 @@ class Context(object):
 
                 self.app_render()
 
-                self.sshclient.zip(os.path.join(os.getcwd(), "ansible-jenkins"),"ansible-jenkins")
+                self.sshclient.zip(os.path.join(os.getcwd(), "ansible-jenkins"), "ansible-jenkins")
 
                 self.sshclient.sendCommand("sudo rm -rf /tmp/*")
                 self.sshclient.sendCommand("ls -la /tmp/")
@@ -270,14 +571,16 @@ class Context(object):
 
                 os.remove("ansible-jenkins.zip")
 
-
             if self.group == "pre-jenkins":
-                self.sshclient = remote.sshclient("{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(resourcegroup=self.resource_group_prefix,
-                    location=self.location), "{}jenkins".format(self.resource_group_prefix))
+                self.sshclient = remote.sshclient(
+                    "{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(
+                        resourcegroup=self.resource_group_prefix,
+                        location=self.location), "{}jenkins".format(self.resource_group_prefix))
                 self.logger.info("Getting Jenkins admin credentials ")
                 log_output = self.sshclient.sendCommand("sudo cat /var/lib/jenkins/secrets/initialAdminPassword")
                 if not log_output:
-                    self.logger.error("Unable to find the credentials either you have already configured jenkins, if not re-run the command after 5 mins")
+                    self.logger.error(
+                        "Unable to find the credentials either you have already configured jenkins, if not re-run the command after 5 mins")
                     sys.exit(1)
                 else:
                     self.logger.warn("Jenkins credentials: {}".format(log_output))
@@ -287,13 +590,14 @@ class Context(object):
             self.logger.error("Exception: {0}".format(err))
             sys.exit(1)
 
-
-
     def app_render(self):
+        """
+        Replaces template file with values for jenkins ansible variables
+        :return:
+        """
         list_files = ['all.yml']
         for files in list_files:
             self.app_render_template(self.find(files), files)
-
 
     def app_render_template(self, path, file):
         if path and os.path.exists(os.path.join(path, file)):
@@ -303,117 +607,137 @@ class Context(object):
             with open(os.path.join(path, file), "w") as fh:
                 fh.write(output_from_parsed_template)
 
-
     def find(self, name):
         for root, dirs, files in os.walk(os.getcwd()):
             if name in files:
                 return os.path.join(root)
 
     def configure_alerting(self):
-       try:
-        self.logger.info("Configuring Azure monitoring alerting for jenkins instance")
-        for resource in self.client.resources.list():
-            resourcename= "{}commonjenkins".format(self.resource_group_prefix)
-            if resource.type == 'Microsoft.Compute/virtualMachines' and resource.name == resourcename:
-                self.logger.info("Found jenkins instance {}".format(resource.name))
-                attributes = {
-                    "location": self.location,
-                    "resourceid": resource.id,
-                    "notification_email": self.cluster_config['NOTIFICATION_EMAIL'],
-                    "lowthreshold": self.cluster_config['AZURE_MONITOR_CPU_LOWER_THRESHOLD'],
-                    "higherthreshold": self.cluster_config['AZURE_MONITOR_CPU_UPPER_THRESHOLD']
-                }
+        """
+        Configures azure monitor alerting for CPU loads in Jenkins VM
+        :return:
+        """
+        try:
+            self.logger.info("Configuring Azure monitoring alerting for jenkins instance")
+            for resource in self.client.resources.list():
+                resourcename = "{}commonjenkins".format(self.resource_group_prefix)
+                if resource.type == 'Microsoft.Compute/virtualMachines' and resource.name == resourcename:
+                    self.logger.info("Found jenkins instance {}".format(resource.name))
+                    attributes = {
+                        "location": self.location,
+                        "resourceid": resource.id,
+                        "notification_email": self.cluster_config['NOTIFICATION_EMAIL'],
+                        "lowthreshold": self.cluster_config['AZURE_MONITOR_CPU_LOWER_THRESHOLD'],
+                        "higherthreshold": self.cluster_config['AZURE_MONITOR_CPU_UPPER_THRESHOLD']
+                    }
 
-                if not attributes["lowthreshold"].isdigit():
-                    self.logger.error("AZURE_MONITOR_CPU_UPPER_THRESHOLD value in clusters.ini is not an integer")
-                    sys.exit(1)
+                    if not attributes["lowthreshold"].isdigit():
+                        self.logger.error("AZURE_MONITOR_CPU_UPPER_THRESHOLD value in clusters.ini is not an integer")
+                        sys.exit(1)
 
-                if not attributes["higherthreshold"].isdigit():
-                    self.logger.error("AZURE_MONITOR_CPU_UPPER_THRESHOLD value in clusters.ini is not an integer")
-                    sys.exit(1)
+                    if not attributes["higherthreshold"].isdigit():
+                        self.logger.error("AZURE_MONITOR_CPU_UPPER_THRESHOLD value in clusters.ini is not an integer")
+                        sys.exit(1)
 
-                attributes_rule = {
-                     "cpuhigh" : cpu_high,
-                     "cpulow": cpu_low,
-                     "cpuzero": cpu_zero
-                }
-                context = adal.AuthenticationContext('https://login.microsoftonline.com/' + self.tenant_id)
-                token_response = context.acquire_token_with_client_credentials('https://management.core.windows.net/',
-                                                                               self.client_id, self.client_secret)
-                access_token = token_response.get('accessToken')
+                    attributes_rule = {
+                        "cpuhigh": cpu_high,
+                        "cpulow": cpu_low,
+                        "cpuzero": cpu_zero
+                    }
 
-                headers = {
-                    "Authorization": 'Bearer ' + access_token,
-                    "Content-Type": 'application/json'
-                }
+                    context = adal.AuthenticationContext('https://login.microsoftonline.com/' + self.tenant_id)
+                    token_response = context.acquire_token_with_client_credentials(
+                        'https://management.core.windows.net/', self.client_id, self.client_secret)
+                    access_token = token_response.get('accessToken')
 
-                rules = ["cpuhigh","cpulow","cpuzero"]
-                for rule in rules:
-                    uri = "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group_prefix}-jenkins/providers/microsoft.insights/alertRules/{rule}?api-version=2014-04-01".format(subscription_id=self.subscription_id,resource_group_prefix=self.resource_group_prefix,rule=rule)
-                    self.logger.debug(uri)
-                    json_data = render(attributes_rule[rule], attributes)
-                    self.logger.debug(json_data)
-                    response = put(uri, json=json.loads(json_data), headers=headers)
-                    if response.status_code == 201 or response.status_code == 200:
-                        response.raise_for_status()
-                        self.logger.info("Azure monitor alert rule creation success for {}".format(rule))
-                    else:
-                        self.logger.error("Azure monitor alert rule creation failed for {}".format(rule))
-                        self.logger.error(response.status_code,response.json())
+                    headers = {
+                        "Authorization": 'Bearer ' + access_token,
+                        "Content-Type": 'application/json'
+                    }
 
-                    self.logger.debug(response.json())
-       except Exception as err:
-          self.logger.error("Exception: Error in creating azure monitor alerting, {0}".format(err))
+                    rules = ["cpuhigh", "cpulow", "cpuzero"]
+                    for rule in rules:
+                        uri = "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group_prefix}-jenkins/providers/microsoft.insights/alertRules/{rule}?api-version=2014-04-01".format(
+                            subscription_id=self.subscription_id, resource_group_prefix=self.resource_group_prefix,
+                            rule=rule)
+                        self.logger.debug(uri)
+                        json_data = render(attributes_rule[rule], attributes)
+                        self.logger.debug(json_data)
+                        response = put(uri, json=json.loads(json_data), headers=headers)
+                        if response.status_code == 201 or response.status_code == 200:
+                            response.raise_for_status()
+                            self.logger.info("Azure monitor alert rule creation success for {}".format(rule))
+                        else:
+                            self.logger.error("Azure monitor alert rule creation failed for {}".format(rule))
+                            self.logger.error(response.status_code, response.json())
+
+                        self.logger.debug(response.json())
+        except Exception as err:
+            self.logger.error("Exception: Error in creating azure monitor alerting, {0}".format(err))
 
     def validatedns(self):
-        registry_name="{resourcegroup}acr{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter)
-        acr_dns = "{}.azurecr.io".format(registry_name)
-        acs_dns = "{resourcegroup}-acs-mgmt-{datacenter}.{location}.cloudapp.azure.com".format(
-            resourcegroup=self.resource_group_prefix, location=self.location,
-            datacenter=self.datacenter)
-        jenkins_dns = "{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(resourcegroup=self.resource_group_prefix,location=self.location)
+        """
+        Returns true if the resource group name specified by the user is valid by checking whether the DNS is valid by resolving a DNS
+        Validates for all datacenter ACR, Jenkins and ACS resources
+        :return: true if resource is valid else false
+        """
+        all_datacenters = ['dev', 'test', 'prod', 'jenkins']
+        for dc in all_datacenters:
+            registry_name = "{resourcegroup}acr{datacenter}".format(resourcegroup=self.resource_group_prefix,
+                                                                    datacenter=dc)
+            resource_group = "{resourcegroup}-{datacenter}".format(resourcegroup=self.resource_group_prefix,
+                                                                  datacenter=dc)
+            acr_dns = "{}.azurecr.io".format(registry_name)
+            acs_dns = "{resourcegroup}-acs-mgmt-{datacenter}.{location}.cloudapp.azure.com".format(
+                resourcegroup=self.resource_group_prefix, location=self.location,
+                datacenter=dc)
+            jenkins_dns = "{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(
+                resourcegroup=self.resource_group_prefix, location=self.location)
 
+            dns_kube_list = {
+                "acr": acr_dns,
+                "acs": acs_dns
+            }
 
-        dns_kube_list = {
-            "acr":acr_dns,
-            "acs":acs_dns
-        }
+            dns_jenkins_list = {
+                "jenkins": jenkins_dns
+            }
+            dns_list = {
+                "dev": dns_kube_list,
+                "test": dns_kube_list,
+                "prod": dns_kube_list,
+                "jenkins": dns_jenkins_list,
+            }
+            self.logger.info("Starting the pre-validate resource group check: {0.app_datacenter} ... ".format(self))
+            resource_group_exist = False
+            for item in self.client.resource_groups.list():
+                if resource_group == item.name:
+                    resource_group_exist = True
 
-        dns_jenkins_list = {
-            "jenkins": jenkins_dns
-        }
-        dns_list = {
-            "dev": dns_kube_list,
-            "test": dns_kube_list,
-            "prod": dns_kube_list,
-            "jenkins": dns_jenkins_list,
-        }
-        self.logger.info("Starting the pre-validate resource group check: {0.app_datacenter} ... ".format(self))
-        resource_group_exist = False
-        for item in self.client.resource_groups.list():
-            if self.resource_group == item.name:
-                resource_group_exist = True
+            if not resource_group_exist:
+                self.logger.info(
+                    "Resource group {} not found under your subscription: {} ... ".format(resource_group, dc))
+            else:
+                self.logger.warn(
+                    "Resource group {} found under your subscription: {} ... ".format(resource_group, dc))
 
-        if not resource_group_exist:
-            self.logger.info("Resource group {0.resource_group} not found under your subscription: {0.app_datacenter} ... ".format(self))
-        else:
-            self.logger.warn("Resource group {0.resource_group} found under your subscription: {0.app_datacenter} ... ".format(self))
+            self.logger.info("Starting the pre-validate DNS check: {} ... ".format(dc))
 
-        self.logger.info("Starting the pre-validate DNS check: {0.app_datacenter} ... ".format(self))
-
-        for key, value in dns_list[self.datacenter].items():
-           if not resource_group_exist and resolvedns(value):
-               self.logger.error("DNS check failed for {}. Already the DNS is in use, Please specifiy a different resource group name in clusters.ini ".format(key))
-               return False
-           elif resource_group_exist and resolvedns(value):
-               self.logger.warn("DNS check passed for {}. Already the DNS is in use in your subscription ".format(key))
-           elif not resource_group_exist and not resolvedns(value):
-               self.logger.info("DNS check passed for {}.".format(key))
-           else:
-               self.logger.info("DNS check passed for {} ".format(key))
-
-
-
+            for key, value in dns_list[dc].items():
+                if not resource_group_exist and resolvedns(value):
+                    self.logger.error(
+                        "DNS check failed for {}. Already the DNS is in use, Please specifiy a different resource group name in clusters.ini ".format(
+                            key))
+                    self.logger.error("Pre-validate condition failed: {} ... ".format(dc))
+                    return False
+                elif resource_group_exist and resolvedns(value):
+                    self.logger.warn(
+                        "DNS check passed for {}. Already the DNS is in use in your subscription ".format(key))
+                elif not resource_group_exist and not resolvedns(value):
+                    self.logger.info("DNS check passed for {}.".format(key))
+                else:
+                    self.logger.info("DNS check passed for {} ".format(key))
+            self.logger.info("Pre-validate condition passed: {} ... ".format(dc))
         self.logger.info("All DNS check passed")
         return True
 
@@ -425,19 +749,19 @@ class Context(object):
 
         self.logger.info("Starting the deployment: {0.app_datacenter} ... ".format(self))
 
-        try:
-            self.client.resource_groups.create_or_update(
-                self.resource_group,
-                {
-                    'location': self.location
-                }
-            )
-        except CloudError as err:
-            self.logger.error("CloudError: {0}".format(err))
-            sys.exit(1)
-        except Exception as err:
-            self.logger.error("Exception: {0}".format(err))
-            sys.exit(1)
+        # try:
+        #     self.client.resource_groups.create_or_update(
+        #         self.resource_group,
+        #         {
+        #             'location': self.location
+        #         }
+        #     )
+        # except CloudError as err:
+        #     self.logger.error("CloudError: {0}".format(err))
+        #     sys.exit(1)
+        # except Exception as err:
+        #     self.logger.error("Exception: {0}".format(err))
+        #     sys.exit(1)
 
         try:
             template_path = os.path.join(self.app_project_path, 'templates', 'template.json')
@@ -464,7 +788,7 @@ class Context(object):
         }
 
         if 'sshkey' in str(parameters):
-            pub_ssh_key_path = os.path.join(os.path.expanduser("~"),".ssh","id_rsa.pub")
+            pub_ssh_key_path = os.path.join(os.path.expanduser("~"), ".ssh", "id_rsa.pub")
             with open(pub_ssh_key_path, 'r') as pub_ssh_file_fd:
                 sshkey = pub_ssh_file_fd.read()
                 attributes.update({
@@ -516,6 +840,12 @@ class Context(object):
         self.logger.info("Completed deleting: {0.app_datacenter} ... ".format(self))
 
     def sync_action(self, config_dict, args):
+        """
+        Manages docker version sync between docker registry and datacenter
+        :param config_dict: list of values for dataenter and registry of from and to
+        :param args:
+        :return:
+        """
         attrs = {}
         cluster_config = get_cluster_config(self.datacenter)
         attrs['cluster_config'] = cluster_config
@@ -534,55 +864,73 @@ class Context(object):
             copy.copy()
 
     def configure_git(self, args):
-       jenkins_host= "{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(resourcegroup=self.resource_group_prefix,location=self.location)
+        """
+        Configures git repository with repo code, webhooks and protects
+        :param args: repo details and actions on the repo
+        :return:
+        """
+        jenkins_host = "{resourcegroup}-release-jenkins.{location}.cloudapp.azure.com".format(
+            resourcegroup=self.resource_group_prefix, location=self.location)
 
-       if args.repo == "" and 'GIT_HUB_APP_REPO_NAME' in self.cluster_config and  self.cluster_config['GIT_HUB_APP_REPO_NAME']:
-           repo_name=self.cluster_config['GIT_HUB_APP_REPO_NAME']
-       elif args.repo:
-           repo_name=args.repo
-       else:
-           self.logger.error("Git Hub repo name not specificied in the clusters.ini")
-           sys.exit(1)
+        if args.repo == "" and 'GIT_HUB_APP_REPO_NAME' in self.cluster_config and self.cluster_config[
+            'GIT_HUB_APP_REPO_NAME']:
+            repo_name = self.cluster_config['GIT_HUB_APP_REPO_NAME']
+        elif args.repo:
+            repo_name = args.repo
+        else:
+            self.logger.error("Git Hub repo name not specificied in the clusters.ini")
+            sys.exit(1)
 
-       self.__dict__.update({
-           'jenkins_host': jenkins_host,
-           'image': args.image,
-           'repo': repo_name})
+        self.__dict__.update({
+            'jenkins_host': jenkins_host,
+            'image': args.image,
+            'repo': repo_name})
 
-
-       git = GitHubApi( **self.__dict__)
-       if args.task == "repo":
-            git.create_repo(repo_name,os.getcwd())
-       elif args.task == "deleterepo":
-           git.delete_repo(repo_name)
-       elif args.task == "orghook":
-           git.create_org_hook()
-       elif args.task == "repohook":
-           git.create_repo_hook(repo_name)
-       elif args.task == "protect":
-           git.set_protection(repo_name)
-       elif args.task == "all":
-           git.create_repo(repo_name, os.getcwd())
-           git.create_repo_hook(repo_name)
-           git.set_protection(args.image)
+        git = GitHubApi(**self.__dict__)
+        if args.task == "repo":
+            git.create_repo(repo_name, os.getcwd())
+        elif args.task == "deleterepo":
+            git.delete_repo(repo_name)
+        elif args.task == "orghook":
+            git.create_org_hook()
+        elif args.task == "repohook":
+            git.create_repo_hook(repo_name)
+        elif args.task == "protect":
+            git.set_protection(repo_name)
+        elif args.task == "all":
+            git.create_repo(repo_name, os.getcwd())
+            git.create_repo_hook(repo_name)
+            git.set_protection(args.image)
 
     def image_action(self, config_dict, args):
+        """
+        Performs action on image like deploy, scale, patch, rollback and getservice on Kube
+        :param config_dict: List of image and conf details
+        :param args: actions to be performed on the image
+        :return:
+        """
         attrs = {}
-        # if args.task in ["build", "push", "deploy", "all"]:
-        #     attrs['flatten'] = False
-        #     attrs['move'] = True
-
         attrs['task'] = args.task
         cluster_config = get_cluster_config(self.datacenter)
         attrs['cluster_config'] = cluster_config
-        attrs['app_docker_registry'] =self.app_docker_registry
+        attrs['app_docker_registry'] = self.app_docker_registry
         attrs['location'] = self.location
+
+        if args.task == "rollback":
+            if args.version == "":
+                self.logger.info("Image: {}, Version: {} for rollback is not valid".format(config_dict["name"],args.version))
+                sys.exit(1)
+            attrs['version'] = args.version
         attrs.update(config_dict)
 
-        if args.task in ["deploy", "scale", "patch", "get", "getservice", "delete"]:
-            os.makedirs(os.path.join(os.path.expanduser("~"),".kube"), exist_ok=True)
-            self.sshclient = remote.sshclient("{resourcegroup}-acs-mgmt-{datacenter}.{location}.cloudapp.azure.com".format(resourcegroup=self.resource_group_prefix,location=self.location,datacenter=self.datacenter), "{resourcegroup}acs{datacenter}".format(resourcegroup=self.resource_group_prefix,datacenter=self.datacenter))
-            self.sshclient.copyFileFrom(".kube/config",os.path.join(os.path.expanduser("~"),".kube","config"))
+        if args.task in ["deploy", "scale", "patch", "get", "getservice", "delete","rollback"]:
+            os.makedirs(os.path.join(os.path.expanduser("~"), ".kube"), exist_ok=True)
+            self.sshclient = remote.sshclient(
+                "{resourcegroup}-acs-mgmt-{datacenter}.{location}.cloudapp.azure.com".format(
+                    resourcegroup=self.resource_group_prefix, location=self.location, datacenter=self.datacenter),
+                "{resourcegroup}acs{datacenter}".format(resourcegroup=self.resource_group_prefix,
+                                                        datacenter=self.datacenter))
+            self.sshclient.copyFileFrom(".kube/config", os.path.join(os.path.expanduser("~"), ".kube", "config"))
             self.logger.info("Copied kube config from acs remote server")
             kube = KubeApi(datacenter=self.datacenter, **attrs)
         if args.task in ["build", "push"]:
@@ -594,6 +942,8 @@ class Context(object):
             kube.scale()
         elif args.task == "patch":
             kube.patch()
+        elif args.task == "rollback":
+            kube.rollback()
         elif args.task == "get":
             kube.get()
         elif args.task == "getservice":
@@ -610,7 +960,6 @@ class Context(object):
             kube.deploy()
         else:
             self.logger.error("No task exist")
-
 
     def _app_project_path(self):
         xs = self.project_path.split(os.sep)
@@ -633,7 +982,6 @@ class Context(object):
 
     def cd_project(self):
         self.cd(self.app_project_path)
-
 
     def get_temp_dir(self):
         temp_dir = os.path.join(tempfile.gettempdir(), '.{}'.format(hash(os.times())))
@@ -661,8 +1009,7 @@ class Context(object):
         shutil.copytree(from_path, to_path)
 
 
-
-cpu_high="""{
+cpu_high = """{
   "location": "{{ location }}",
   "tags": { },
   "properties": {
@@ -691,8 +1038,7 @@ cpu_high="""{
   }
 }""".strip()
 
-
-cpu_zero="""{
+cpu_zero = """{
   "location": "{{ location }}",
   "tags": { },
   "properties": {
@@ -720,7 +1066,7 @@ cpu_zero="""{
   }
 }""".strip()
 
-cpu_low="""{
+cpu_low = """{
   "location": "{{ location }}",
   "tags": { },
   "properties": {

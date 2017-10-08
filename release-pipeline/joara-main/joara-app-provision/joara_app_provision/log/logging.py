@@ -44,7 +44,7 @@ class JoaraLoggingLevelManager(object):  # pylint: disable=too-few-public-method
         # --verbose
         {
             ROOT_LOGGER_NAME: logging.INFO,
-            'root': logging.CRITICAL,
+            'root': logging.WARNING,
         },
         # --debug
         {

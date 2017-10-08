@@ -6,11 +6,13 @@ import sys
 logger = logging.get_logger(__name__)
 
 def validate_ssh_key(ssh_key_file):
+    """
+    Returns true if the SSH key is valid
+    :param ssh_key_file:
+    :return:
+    """
 
     try:
-        # file = (ssh_key_file or
-        #                   os.path.join(os.path.expanduser('~'), '.ssh', 'id_rsa.pub'))
-
         file = (os.path.join(os.path.expanduser('~'), '.ssh', 'id_rsa.pub'))
         content = ""
         if os.path.exists(file):
