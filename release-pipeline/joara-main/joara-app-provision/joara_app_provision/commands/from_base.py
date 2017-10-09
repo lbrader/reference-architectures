@@ -59,6 +59,7 @@ def provision_images(module, images,  args):
                 context.image_action(attributes, args)
     except Exception as err:
         logger.error('ERROR: Provisioning images got an Exception: {}'.format(err))
+        sys.exit(1)
 
 
 def sync_version(run_file, args):
