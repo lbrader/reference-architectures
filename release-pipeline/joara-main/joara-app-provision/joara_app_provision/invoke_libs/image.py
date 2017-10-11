@@ -64,23 +64,23 @@ class Image(object):
                     'client_secret': os.environ['AZURE_CLIENT_SECRET'],
                     'tenant_id': os.environ['AZURE_TENANT_ID']})
             else:
-                cuurent_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                current_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
                                                       "{}.pickle".format(self.resource_group))
-                read_from_cache = os.path.isfile(cuurent_token_filename)
+                read_from_cache = os.path.isfile(current_token_filename)
 
                 if (read_from_cache):
-                    azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
-                    self.client_id = azure_credentital['AZURE_CLIENT_ID']
-                    self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
-                    self.tenant_id = azure_credentital['AZURE_TENANT_ID']
-                    self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
+                    azure_credential = pickle.load(open(current_token_filename, "rb"))
+                    self.client_id = azure_credential['AZURE_CLIENT_ID']
+                    self.client_secret = azure_credential['AZURE_CLIENT_SECRET']
+                    self.tenant_id = azure_credential['AZURE_TENANT_ID']
+                    self.subscription_id = azure_credential['AZURE_SUBSCRIPTION_ID']
 
                 os.environ['AZURE_CLIENT_ID'] = self.client_id
                 os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
                 os.environ['AZURE_TENANT_ID'] = self.tenant_id
                 os.environ['AZURE_SUBSCRIPTION_ID'] = self.subscription_id
         except Exception as e:
-                logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, {}".format(e)
+                logs = "### Please update your azure credentials under clusters.ini or to environment variables ###, {}".format(e)
                 self.logger.error(logs)
                 raise RuntimeError(logs)
 
@@ -107,7 +107,7 @@ class Image(object):
 
 
             else:
-                logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, "
+                logs = "### Please update your azure credentials under clusters.ini or to environment variables ###, "
                 self.logger.error(logs)
                 raise RuntimeError(logs)
 

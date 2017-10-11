@@ -31,7 +31,7 @@ def destroy_add_subcommand(parser):
             'acs',
             'monitor'
         ],
-        help="Which module to destrory"
+        help="Which module to destroy"
     )
     subcommand.add_argument(
         '--action',

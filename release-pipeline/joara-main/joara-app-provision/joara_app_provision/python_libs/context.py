@@ -42,11 +42,11 @@ from azure.cli.core._profile import Profile
 
 class Context(object):
     """
-    Core init conext for the joara, all command and actions are initialized from here. Manages credentials and root path for caller functions
+    Core init context for the joara, all command and actions are initialized from here. Manages credentials and root path for caller functions
     """
     def __init__(self, **kwargs):
         """
-        Init conext to maanging entire joara app
+        Init context to manage entire joara app
         :param kwargs:
         """
         try:
@@ -95,7 +95,7 @@ class Context(object):
                                               'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
 
                 except Exception as e:
-                    logs = "Please update your azure subscription id under culsters.ini or to environment variables , {}".format(
+                    logs = "Please update your azure subscription id under clusters.ini or to environment variables , {}".format(
                         e)
                     self.logger.error(logs)
                     raise RuntimeError(logs)
@@ -141,22 +141,22 @@ class Context(object):
                                                       'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
 
                         except Exception as e:
-                            logs = "Please update your azure subscription id under culsters.ini or to environment variables , {}".format(
+                            logs = "Please update your azure subscription id under clusters.ini or to environment variables , {}".format(
                                 e)
                             self.logger.error(logs)
                             raise RuntimeError(logs)
 
                         os.makedirs(os.path.join(os.path.expanduser("~"), ".joara"), exist_ok=True)
-                        cuurent_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                        current_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
                                                               "{}.pickle".format(self.resource_group))
-                        read_from_cache = os.path.isfile(cuurent_token_filename)
+                        read_from_cache = os.path.isfile(current_token_filename)
 
                         if (read_from_cache):
-                            azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
-                            self.client_id = azure_credentital['AZURE_CLIENT_ID']
-                            self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
-                            self.tenant_id = azure_credentital['AZURE_TENANT_ID']
-                            self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
+                            azure_credential = pickle.load(open(current_token_filename, "rb"))
+                            self.client_id = azure_credential['AZURE_CLIENT_ID']
+                            self.client_secret = azure_credential['AZURE_CLIENT_SECRET']
+                            self.tenant_id = azure_credential['AZURE_TENANT_ID']
+                            self.subscription_id = azure_credential['AZURE_SUBSCRIPTION_ID']
 
                         else:
                             profile = Profile()
@@ -181,18 +181,18 @@ class Context(object):
                                 vault_uri = "https://{}-kv.vault.azure.net".format(resource_group)
                                 secret_name_list = ["AZURECLIENTID", "AZURECLIENTSECRET", "AZURETENANTID",
                                                     "AZURESUBSCRIPTIONID"]
-                                azure_srvp_credentital = {}
+                                azure_srvp_credential = {}
                                 for secret_name in secret_name_list:
                                     output_secret = client_kv.get_secret(vault_uri, secret_name, secret_version='')
                                     try:
                                         if secret_name == "AZURECLIENTID":
-                                            azure_srvp_credentital["AZURE_CLIENT_ID"] = output_secret.value
+                                            azure_srvp_credential["AZURE_CLIENT_ID"] = output_secret.value
                                         elif secret_name == "AZURECLIENTSECRET":
-                                            azure_srvp_credentital["AZURE_CLIENT_SECRET"] = output_secret.value
+                                            azure_srvp_credential["AZURE_CLIENT_SECRET"] = output_secret.value
                                         elif secret_name == "AZURETENANTID":
-                                            azure_srvp_credentital["AZURE_TENANT_ID"] = output_secret.value
+                                            azure_srvp_credential["AZURE_TENANT_ID"] = output_secret.value
                                         elif secret_name == "AZURESUBSCRIPTIONID":
-                                            azure_srvp_credentital["AZURE_SUBSCRIPTION_ID"] = output_secret.value
+                                            azure_srvp_credential["AZURE_SUBSCRIPTION_ID"] = output_secret.value
                                         else:
                                             self.logger.error(
                                                 "No service principle keys found for {}".format(secret_name))
@@ -201,13 +201,13 @@ class Context(object):
                                         logs = "Unable to get secret tokens , {}".format(e)
                                         self.logger.error(logs)
                                         raise RuntimeError(logs)
-                                pickle.dump(azure_srvp_credentital, open(token_filename, "wb"))
+                                pickle.dump(azure_srvp_credential, open(token_filename, "wb"))
 
-                        azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
-                        self.client_id = azure_credentital['AZURE_CLIENT_ID']
-                        self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
-                        self.tenant_id = azure_credentital['AZURE_TENANT_ID']
-                        self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
+                        azure_credential = pickle.load(open(current_token_filename, "rb"))
+                        self.client_id = azure_credential['AZURE_CLIENT_ID']
+                        self.client_secret = azure_credential['AZURE_CLIENT_SECRET']
+                        self.tenant_id = azure_credential['AZURE_TENANT_ID']
+                        self.subscription_id = azure_credential['AZURE_SUBSCRIPTION_ID']
 
                         # os.environ['AZURE_CLIENT_ID'] = self.client_id
                         # os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
@@ -220,7 +220,7 @@ class Context(object):
                             tenant=self.tenant_id
                         )
                 except Exception as e:
-                    logs = "Unable to authenticate, please update your azure credentials under culsters.ini or to environment variables , {}".format(
+                    logs = "Unable to authenticate, please update your azure credentials under clusters.ini or to environment variables , {}".format(
                         e)
                     self.logger.error(logs)
                     raise RuntimeError(logs)
@@ -269,7 +269,7 @@ class Context(object):
 
     def configure_azure(self):
         """
-        Core to configure azure with creation of service principle, keyvalut and role assigment - works only for owner with administrative privileges
+        Core to configure azure with creation of service principle, key vault and role assignment - works only for owner with administrative privileges
         :return:
         """
         self.logger.info("Started azure configure")
@@ -307,7 +307,7 @@ class Context(object):
             for dc in dc_list:
                 resource_group = "{}-{}".format(resource_group_name, dc)
                 kv_client = KeyVaultManagementClient(self.credentials, subscription_id)
-                self.logger.info("Key valut creation strated for datacenter: {0}".format(dc))
+                self.logger.info("Key vault creation started for datacenter: {0}".format(dc))
                 try:
                     vault = kv_client.vaults.create_or_update(
                         resource_group,
@@ -339,21 +339,21 @@ class Context(object):
                             }
                         }
                     )
-                    self.logger.info("Key valut creation compelted for datacenter: {0}".format(dc))
+                    self.logger.info("Key vault creation completed for datacenter: {0}".format(dc))
                 except Exception as err:
-                    self.logger.error("Exception: Key valut creation failed for datacenter: {}, {}".format(dc, err))
+                    self.logger.error("Exception: Key vault creation failed for datacenter: {}, {}".format(dc, err))
                     sys.exit(1)
                 app_name = resource_group
                 self.logger.info("Service principle creation started for datacenter: {0}".format(dc))
                 try:
-                    json_srvp = create_service_principal_for_rbac(name=app_name, role="owner", show_auth_for_sdk=False)
+                    json_srvp = create_service_principal_for_rbac(name=app_name, role="owner", show_auth_for_sdk=False,skip_assignment=True)
                     self.logger.info("Service principle creation completed for datacenter: {0}".format(dc))
                 except Exception as err:
                     self.logger.error(
                         "Exception: Service principle creation failed for datacenter: {}, {}".format(dc, err))
                     sys.exit(1)
 
-                self.logger.info("Key valut secret creation started for datacenter: {0}".format(dc))
+                self.logger.info("Key vault secret creation started for datacenter: {0}".format(dc))
 
                 try:
                     # Create a secret
@@ -375,10 +375,10 @@ class Context(object):
                     secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'AZURESUBSCRIPTIONID',
                                                          subscription_id)
                     secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
-                    self.logger.info("Key valut secret creation completed for datacenter: {0}".format(dc))
+                    self.logger.info("Key vault secret creation completed for datacenter: {0}".format(dc))
                 except Exception as err:
                     self.logger.error(
-                        "Exception: Key valut secret creation failed for datacenter: {}, {}".format(dc, err))
+                        "Exception: Key vault secret creation failed for datacenter: {}, {}".format(dc, err))
                     sys.exit(1)
 
                 _RETRY_TIMES = 36
@@ -388,13 +388,13 @@ class Context(object):
                         if dc == "test":
                             output = create_role_assignment(role="owner", assignee=json_srvp["name"],
                                                             resource_group_name=resource_group)
-                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                            output = create_role_assignment(role="contributor", assignee=json_srvp["name"],
                                                             resource_group_name="{}-{}".format(resource_group_name,
                                                                                                "dev"))
                         elif dc == "prod":
                             output = create_role_assignment(role="owner", assignee=json_srvp["name"],
                                                             resource_group_name=resource_group)
-                            output = create_role_assignment(role="owner", assignee=json_srvp["name"],
+                            output = create_role_assignment(role="contributor", assignee=json_srvp["name"],
                                                             resource_group_name="{}-{}".format(resource_group_name,
                                                                                                "test"))
                         else:
@@ -415,10 +415,10 @@ class Context(object):
                                 ex.response.headers if hasattr(ex, 'response') else ex)  # pylint: disable=no-member
                             raise
 
-                self.logger.info("Compelted for datacenter: {0}".format(dc))
-            self.logger.info("Compelted azure configure")
+                self.logger.info("Completed for datacenter: {0}".format(dc))
+            self.logger.info("Completed azure configure")
         except Exception as err:
-            self.logger.error("Exception: Arure configuration failed, {0}".format(err))
+            self.logger.error("Exception: Azure configuration failed, {0}".format(err))
             sys.exit(1)
 
     def run_win_cmd(self, cmd):
@@ -519,11 +519,11 @@ class Context(object):
                     token_filename = os.path.join(os.path.expanduser("~"), ".joara",
                                                   "{}.pickle".format(resource_group))
 
-                    azure_credentital = pickle.load(open(token_filename, "rb"))
-                    self.attrs['{}_subscriptionId'.format(dc)] = azure_credentital['AZURE_SUBSCRIPTION_ID']
-                    self.attrs['{}_clientId'.format(dc)] = azure_credentital['AZURE_CLIENT_ID']
-                    self.attrs['{}_clientSecret'.format(dc)] = azure_credentital['AZURE_CLIENT_SECRET']
-                    self.attrs['{}_tenant'.format(dc)] = azure_credentital['AZURE_TENANT_ID']
+                    azure_credential = pickle.load(open(token_filename, "rb"))
+                    self.attrs['{}_subscriptionId'.format(dc)] = azure_credential['AZURE_SUBSCRIPTION_ID']
+                    self.attrs['{}_clientId'.format(dc)] = azure_credential['AZURE_CLIENT_ID']
+                    self.attrs['{}_clientSecret'.format(dc)] = azure_credential['AZURE_CLIENT_SECRET']
+                    self.attrs['{}_tenant'.format(dc)] = azure_credential['AZURE_TENANT_ID']
 
                 
                 self.attrs['location'] = self.regionmap[self.location]
@@ -859,7 +859,7 @@ class Context(object):
             resourcegroup=self.resource_group_prefix, datacenter=self.datacenter))
         self.sshclient.copyFileFrom(".kube/config", "{user}/.kube/config".format(user=os.path.expanduser("~")))
         self.logger.info("Copied kube config from acs remote server")
-        copy = CopyDocker(datancenter=self.datacenter, **attrs)
+        copy = CopyDocker(datacenter=self.datacenter, **attrs)
         if args.task == "copy":
             copy.copy()
 
@@ -878,7 +878,7 @@ class Context(object):
         elif args.repo:
             repo_name = args.repo
         else:
-            self.logger.error("Git Hub repo name not specificied in the clusters.ini")
+            self.logger.error("Git Hub repo name not specified in the clusters.ini")
             sys.exit(1)
 
         self.__dict__.update({

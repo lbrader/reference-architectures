@@ -82,9 +82,9 @@ def validate_dns(args):
     :return:
     """
     app_main = find_app_main()
-    moudle_path = os.path.join(app_main, 'infrastructure', 'provisioning',args.group,'run')
+    module_path = os.path.join(app_main, 'infrastructure', 'provisioning',args.group,'run')
     context = Context(
-        file=moudle_path,
+        file=module_path,
         datacenter=args.datacenter,
         group=args.group
     )
@@ -102,7 +102,7 @@ def provision(args):
     :return:
     """
     app_main = find_app_main()
-    moudle_path = os.path.join(app_main, 'infrastructure', 'provisioning',args.group,'run')
+    module_path = os.path.join(app_main, 'infrastructure', 'provisioning',args.group,'run')
 
     if args.group == 'acs':
         attributes = {
@@ -113,7 +113,7 @@ def provision(args):
 
 
     context = Context(
-        file=moudle_path,
+        file=module_path,
         datacenter=args.datacenter,
         group=args.group
     )
@@ -131,9 +131,9 @@ def configure_jenkins(args):
     try:
         app_main = find_app_main()
         if 'jenkins' in args.group:
-            moudle_path = os.path.join(app_main, 'infrastructure', 'configure','jenkins','run')
+            module_path = os.path.join(app_main, 'infrastructure', 'configure','jenkins','run')
         context = Context(
-            file=moudle_path,
+            file=module_path,
             datacenter=args.datacenter,
             group=args.group
         )
@@ -160,9 +160,9 @@ def configure_monitor(args):
     :return:
     """
     app_main = find_app_main()
-    moudle_path = os.path.join(app_main, 'infrastructure', 'configure','jenkins','run')
+    module_path = os.path.join(app_main, 'infrastructure', 'configure','jenkins','run')
     context = Context(
-        file=moudle_path,
+        file=module_path,
         datacenter=args.datacenter,
         group=args.group
     )
@@ -177,9 +177,9 @@ def configure_git(args):
     """
     app_main = find_app_main()
     if 'git' in args.group:
-        moudle_path = os.path.join(app_main, 'infrastructure', 'images_repo',args.image,'run')
+        module_path = os.path.join(app_main, 'infrastructure', 'images_repo',args.image,'run')
     context = Context(
-        file=moudle_path,
+        file=module_path,
         datacenter=args.datacenter,
         group=args.group
     )
@@ -190,7 +190,7 @@ def configure_git(args):
 
 def configure_azure(args):
     """
-    Executes creation of azure service principle, role assignment and keyvalut. Works only with Owner and Administrator privilege users
+    Executes creation of azure service principle, role assignment and key vault. Works only with Owner and Administrator privilege users
     :param args: command line arguments passed to the script
     :return:
     """
@@ -217,7 +217,7 @@ def destroy(args):
     :return:
     """
     app_main = find_app_main()
-    moudle_path = os.path.join(app_main, 'infrastructure', 'provisioning', args.group, 'run')
-    context = Context(file=moudle_path, datacenter=args.datacenter,action=args.action)
+    module_path = os.path.join(app_main, 'infrastructure', 'provisioning', args.group, 'run')
+    context = Context(file=module_path, datacenter=args.datacenter,action=args.action)
     context.destroy()
 

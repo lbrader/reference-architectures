@@ -23,7 +23,7 @@ class CopyDocker(object):
     """
     Init class for copying docker from one datacenter to other datacenter and deploys to Kube
     """
-    def __init__(self, datancenter, **kwargs):
+    def __init__(self, datacenter, **kwargs):
         self.attributes = {
             'user': 'dev',
             'registry_version': 'v2'
@@ -46,23 +46,23 @@ class CopyDocker(object):
                     'client_secret': os.environ['AZURE_CLIENT_SECRET'],
                     'tenant_id': os.environ['AZURE_TENANT_ID']})
             else:
-                cuurent_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
-                                                      "{}.pickle".format(self.resource_group))
-                read_from_cache = os.path.isfile(cuurent_token_filename)
+                current_token_filename = os.path.join(os.path.expanduser("~"), ".joara",
+                                                      "{}.current_token_filename".format(self.resource_group))
+                read_from_cache = os.path.isfile(current_token_filename)
 
                 if (read_from_cache):
-                    azure_credentital = pickle.load(open(cuurent_token_filename, "rb"))
-                    self.client_id = azure_credentital['AZURE_CLIENT_ID']
-                    self.client_secret = azure_credentital['AZURE_CLIENT_SECRET']
-                    self.tenant_id = azure_credentital['AZURE_TENANT_ID']
-                    self.subscription_id = azure_credentital['AZURE_SUBSCRIPTION_ID']
+                    azure_credential = pickle.load(open(current_token_filename, "rb"))
+                    self.client_id = azure_credential['AZURE_CLIENT_ID']
+                    self.client_secret = azure_credential['AZURE_CLIENT_SECRET']
+                    self.tenant_id = azure_credential['AZURE_TENANT_ID']
+                    self.subscription_id = azure_credential['AZURE_SUBSCRIPTION_ID']
 
                 os.environ['AZURE_CLIENT_ID'] = self.client_id
                 os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
                 os.environ['AZURE_TENANT_ID'] = self.tenant_id
                 os.environ['AZURE_SUBSCRIPTION_ID'] = self.subscription_id
         except Exception as e:
-                logs = "### Please update your azure credentials under culsters.ini or to environment variables ###, {}".format(e)
+                logs = "### Please update your azure credentials under clusters.ini or to environment variables ###, {}".format(e)
                 self.logger.exception(logs)
                 raise RuntimeError(logs)
 
@@ -110,9 +110,9 @@ class CopyDocker(object):
         self.logger.info('cd {}'.format(directory))
         os.chdir(directory)
 
-    def copyfromstroage(self, datacenter='local'):
+    def copyfromstorage(self, datacenter='local'):
         """
-        Copies images version yml from stroage to local
+        Copies images version yml from storage to local
         :param datacenter: name of datacenter
         :return:
         """
@@ -146,8 +146,8 @@ class CopyDocker(object):
         """
         # procs = 3
 
-        self.copyfromstroage(self.from_datacenter)
-        self.copyfromstroage(self.datacenter)
+        self.copyfromstorage(self.from_datacenter)
+        self.copyfromstorage(self.datacenter)
         list_image = self.version_manager.get_images_list(datacenter=self.from_datacenter)
 
         # Create a list of jobs and then iterate through
@@ -204,10 +204,10 @@ class CopyDocker(object):
         """
         Syncs docker version from one docker registry to other docker registry datacenter and deploys to Kube
         :param from_registry: from which docker registry to copy
-        :param from_user: dcker registry user
+        :param from_user: docker registry user
         :param image: name of the image to copy
         :param version: version of image to copy
-        :param return_dict: returns the stauts of copy
+        :param return_dict: returns the status of copy
         :return:
         """
         fqdi = "{registry}/{user}/{image}:{version}".format(

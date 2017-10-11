@@ -26,7 +26,7 @@ def get_clusters_ini_path():
             paths_tried.append(path)
         return path
     except Exception as err:
-        print('ERROR: Reading clustes.ini got an Exception: {}'.format(err))
+        print('ERROR: Reading clusters.ini got an Exception: {}'.format(err))
         sys.exit(1)
 
 
@@ -35,7 +35,7 @@ def read_cluster_config(clusters_ini_path, datacenter):
     Reads clusters.ini file and populates datacenter information
     :param clusters_ini_path: path of cluster.ini and datacenter information to read
     :param datacenter:
-    :return: dict of key valus of configuration values for datacenter
+    :return: dict of key values of configuration values for datacenter
     """
     try:
         if not os.path.exists(clusters_ini_path):
@@ -58,7 +58,7 @@ def read_cluster_config(clusters_ini_path, datacenter):
         return merged_dict
 
     except Exception as err:
-        print('ERROR: Reading clustes.ini as dict got an Exception: {}'.format(err))
+        print('ERROR: Reading clusters.ini as dict got an Exception: {}'.format(err))
         sys.exit(1)
 
 
