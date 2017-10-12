@@ -93,9 +93,9 @@ def bootstrap_subcommand(args):
                         "################### Completed configuring Azure Monitor for: {}, resource: {} ###################".format(
                             dc, args.group))
 
-                    logger.warn(
-                        "################### We will be waiting for 5 mins for Jenkins machine to come up ###################")
-                    time.sleep(300)
+                    #logger.warn(
+                      #  "################### We will be waiting for 5 mins for Jenkins machine to come up ###################")
+                    #time.sleep(300)
                     logger.info("################### Started pre-configuring jenkins ###################")
                     args = Attributes({'group': "pre-jenkins", "datacenter": dc})
                     from_base.configure_jenkins(args)

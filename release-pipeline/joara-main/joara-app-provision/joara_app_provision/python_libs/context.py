@@ -236,7 +236,8 @@ class Context(object):
 
                 self.logger.info("app_datacenter: {0.app_datacenter} ".format(self))
 
-                validate_ssh_key(self.ssh_key_file)
+                if self.group != "":
+                    validate_ssh_key(self.ssh_key_file)
 
                 self.client = ResourceManagementClient(self.credentials, self.subscription_id)
                 self.check_location()
@@ -577,15 +578,30 @@ class Context(object):
                         resourcegroup=self.resource_group_prefix,
                         location=self.location), "{}jenkins".format(self.resource_group_prefix))
                 self.logger.info("Getting Jenkins admin credentials ")
-                log_output = self.sshclient.sendCommand("sudo cat /var/lib/jenkins/secrets/initialAdminPassword")
-                if not log_output:
-                    self.logger.error(
-                        "Unable to find the credentials either you have already configured jenkins, if not re-run the command after 5 mins")
-                    sys.exit(1)
-                else:
-                    self.logger.warn("Jenkins credentials: {}".format(log_output))
 
-                self.logger.info("Please use the above credentials for configuring jenkins")
+                _RETRY_TIMES = 20
+                for l in range(0, _RETRY_TIMES):
+                    try:
+                        log_output = self.sshclient.sendCommand(
+                            "sudo cat /var/lib/jenkins/secrets/initialAdminPassword")
+                        if not log_output:
+                            raise Exception('Unable to get jenkins credentials')
+                        else:
+                            self.logger.warn("Jenkins credentials: {}".format(log_output))
+
+                        self.logger.info("Please use the above credentials for configuring jenkins")
+                        break
+                    except Exception as ex:
+                        if l < _RETRY_TIMES-1:
+                            time.sleep(30)
+                            self.logger.warning('Retrying to get jenkins credentials: %s/%s', l + 1, _RETRY_TIMES)
+                        else:
+                            self.logger.error(
+                                "Unable to find the credentials either you have already configured jenkins, if not re-run the pre-jenkins command after 5 mins")
+                            sys.exit(1)
+
+
+
         except Exception as err:
             self.logger.error("Exception: {0}".format(err))
             sys.exit(1)
