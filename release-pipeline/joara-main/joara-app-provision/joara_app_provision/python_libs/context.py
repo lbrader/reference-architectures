@@ -247,6 +247,25 @@ class Context(object):
             self.logger.error("Exception: In Initializing the context {0}".format(err))
             sys.exit(1)
 
+    def register_providers(self):
+        """
+        Registers resource providers to subscription
+        :return:
+        """
+        try:
+            self.logger.info("################### Started Registering resource providers ###################")
+            providers_list = ["Microsoft.Insights","Microsoft.Compute","Microsoft.ContainerService","Microsoft.ContainerRegistry","Microsoft.KeyVault","Microsoft.Storage"]
+            for provider in providers_list:
+                self.logger.info("Registering resource provider '{}' ".format(provider))
+                self.client.providers.register(provider)
+            self.logger.info("################### Completed Registering resource providers ###################")
+        except CloudError as err:
+            self.logger.error("CloudError: {0}".format(err))
+            sys.exit(1)
+        except Exception as err:
+            self.logger.error("Exception: {0}".format(err))
+            sys.exit(1)
+
     def check_location(self):
         """
         Checks azure resource location and exit program if its a not a valid location
@@ -275,6 +294,7 @@ class Context(object):
         """
         self.logger.info("Started azure configure")
         try:
+            self.register_providers()
             self.check_location()
             credkv, subscription_id, _ = self.profile.get_login_credentials(resource='https://vault.azure.net')
             credgm, subscription_id, _ = self.profile.get_login_credentials(resource='https://graph.windows.net')
@@ -685,7 +705,7 @@ class Context(object):
                             self.logger.info("Azure monitor alert rule creation success for {}".format(rule))
                         else:
                             self.logger.error("Azure monitor alert rule creation failed for {}".format(rule))
-                            self.logger.error(response.status_code, response.json())
+                            self.logger.error("{},{}".format(response.status_code, response.json()))
 
                         self.logger.debug(response.json())
         except Exception as err:

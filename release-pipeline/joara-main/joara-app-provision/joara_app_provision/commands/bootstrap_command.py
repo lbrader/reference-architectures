@@ -102,10 +102,10 @@ def bootstrap_subcommand(args):
                     from_base.configure_jenkins(args)
                     logger.info("################### Completed pre-configuring jenkins ###################")
                     logger.warn(
-                        "################### Please configure jenkins in web ui by following the steps present in the document, on completion please type yes or no ###################")
+                        "################### Please configure jenkins in web ui by following the steps present in the document, on completion please enter 'yes' to confirm ###################")
 
                     try:
-                        response = input("Have you configured jenkins ? Please type yes or no to continue:")
+                        response = input("Have you configured jenkins ? Please enter 'yes' to confirm:")
                     except SyntaxError:
                         pass
 
@@ -115,7 +115,7 @@ def bootstrap_subcommand(args):
                         logger.info("################### All steps completed ###################")
                     else:
                         logger.warn(
-                            "################### Your response is {}, so jenkins configuration not proceeded. ###################".format(
+                            "################### Your response is {}, so jenkins configuration not proceeded. You can also run jenskinsconfigure command separately ###################".format(
                                 response))
                         sys.exit(1)
         ### `all` provisions everything (acs,acr,storage) for only selected datacenter datacenter
