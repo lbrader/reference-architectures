@@ -95,7 +95,7 @@ class Context(object):
                                               'tenant_id': self.cluster_config['AZURE_TENANT_ID']})
 
                 except Exception as e:
-                    logs = "Please update your azure subscription id under clusters.ini or to environment variables , {}".format(
+                    logs = "Please update your azure subscription id and tenant id under clusters.ini or to environment variables , {}".format(
                         e)
                     self.logger.error(logs)
                     raise RuntimeError(logs)
@@ -195,7 +195,7 @@ class Context(object):
                                             azure_srvp_credential["AZURE_SUBSCRIPTION_ID"] = output_secret.value
                                         else:
                                             self.logger.error(
-                                                "No service principle keys found for {}".format(secret_name))
+                                                "No service principal keys found for {}".format(secret_name))
                                             sys.exit(1)
                                     except Exception as e:
                                         logs = "Unable to get secret tokens , {}".format(e)
@@ -220,7 +220,7 @@ class Context(object):
                             tenant=self.tenant_id
                         )
                 except Exception as e:
-                    logs = "Unable to authenticate, please update your azure credentials under clusters.ini or to environment variables , {}".format(
+                    logs = "Unable to authenticate, {}".format(
                         e)
                     self.logger.error(logs)
                     raise RuntimeError(logs)
@@ -270,7 +270,7 @@ class Context(object):
 
     def configure_azure(self):
         """
-        Core to configure azure with creation of service principle, key vault and role assignment - works only for owner with administrative privileges
+        Core to configure azure with creation of service principal, key vault and role assignment - works only for owner with administrative privileges
         :return:
         """
         self.logger.info("Started azure configure")
@@ -345,13 +345,13 @@ class Context(object):
                     self.logger.error("Exception: Key vault creation failed for datacenter: {}, {}".format(dc, err))
                     sys.exit(1)
                 app_name = resource_group
-                self.logger.info("Service principle creation started for datacenter: {0}".format(dc))
+                self.logger.info("Service principal creation started for datacenter: {0}".format(dc))
                 try:
                     json_srvp = create_service_principal_for_rbac(name=app_name, role="owner", show_auth_for_sdk=False,skip_assignment=True)
-                    self.logger.info("Service principle creation completed for datacenter: {0}".format(dc))
+                    self.logger.info("Service principal creation completed for datacenter: {0}".format(dc))
                 except Exception as err:
                     self.logger.error(
-                        "Exception: Service principle creation failed for datacenter: {}, {}".format(dc, err))
+                        "Exception: Service principal creation failed for datacenter: {}, {}".format(dc, err))
                     sys.exit(1)
 
                 self.logger.info("Key vault secret creation started for datacenter: {0}".format(dc))

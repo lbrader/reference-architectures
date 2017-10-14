@@ -52,6 +52,7 @@ def bootstrap_subcommand(args):
         kube_datacenters = ['dev', 'test', 'prod']
         all_datacenters = ['dev', 'test', 'prod', 'jenkins']
         groups = ['acr', 'acs', 'storage']
+        shutil.rmtree(os.path.join(os.path.expanduser("~"), ".joara"), ignore_errors=True)
         if args.datacenter == "all" and args.group == "all":
            ### `all` provisions everything (acs,acr,storage) for all datacenter
             gitargs = Attributes(
