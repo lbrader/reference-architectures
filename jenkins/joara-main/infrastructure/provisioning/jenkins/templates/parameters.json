@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminSSHPublicKey": {
+      "value": "{{ sshkey }}"
+    },
+    "adminUserName": {
+      "value": "{{ resourcegroup }}{{ datacenter }}"
+    },
+    "authenticationType": {
+      "value": "sshPublicKey"
+    },
+    "dnsPrefix": {
+      "value": "{{ resourcegroup }}-release-{{ datacenter }}"
+    },
+    "publicIPName": {
+      "value": "JenkinsIP{{ datacenter }}"
+    },
+    "publicIPNewOrExisting": {
+      "value": "new"
+    },
+    "publicIPResourceGroup": {
+      "value": "{{ resourcegroup }}-{{ datacenter }}"
+    },
+    "storageAccountName": {
+      "value": "{{ resourcegroup }}st{{ datacenter }}"
+    },
+    "storageAccountNewOrExisting": {
+      "value": "new"
+    },
+    "storageAccountType": {
+      "value": "Premium_LRS"
+    },
+    "storageAccountResourceGroup": {
+      "value": "{{ resourcegroup }}-{{ datacenter }}"
+    },
+    "vmName": {
+      "value": "{{ resourcegroup }}common{{ datacenter }}"
+    },
+    "vmSize": {
+      "value": "Standard_DS2_v2"
+    },
+    "location": {
+      "value": "{{ location }}"
+    },
+    "jenkinsReleaseType": {
+      "value": "LTS"
+    }
+  }
+}

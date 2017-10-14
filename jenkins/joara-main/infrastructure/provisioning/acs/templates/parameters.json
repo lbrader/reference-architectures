@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceName": {
+      "value": "{{ resourcegroup }}-acs-{{ datacenter }}"
+    },
+    "masterDnsNamePrefix": {
+      "value": "{{ resourcegroup }}-acs-mgmt-{{ datacenter }}"
+    },
+    "agentDnsNamePrefix": {
+      "value": "{{ resourcegroup }}-acs-agents-{{ datacenter }}"
+    },
+    "agentCount": {
+      "value": {{ agentcount }}
+    },
+    "agentVMSize": {
+      "value": "Standard_DS2"
+    },
+    "linuxAdminUsername": {
+      "value": "{{ resourcegroup }}acs{{ datacenter }}"
+    },
+    "orchestratorType": {
+      "value": "Kubernetes"
+    },
+    "masterCount": {
+      "value": 1
+    },
+    "sshRSAPublicKey": {
+      "value": "{{ sshkey }}"
+    },
+    "servicePrincipalClientId": {
+      "value": "{{ client_id }}"
+    },
+    "servicePrincipalClientSecret": {
+      "value": "{{ client_secret }}"
+    },
+    "osType": {
+      "value": "Linux"
+    },
+    "ukRegion": {
+      "value": false
+    }
+  }
+}

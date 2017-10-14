@@ -1,0 +1,14 @@
+---
+- name: Create Jenkins job directories
+  file: 
+    path="{{ jenkins_directory }}/jobs/{{git_org_id}}"
+    state=directory
+    owner=jenkins
+    group=jenkins
+  with_items: "{{ jenkins_jobs }}"
+
+- name: Copy Jenkins job configurations
+  template: src=jobs/{{item}}.xml dest=/var/lib/jenkins/jobs/{{git_org_id}}/config.xml  owner=jenkins group=jenkins mode=0644
+  with_items: "{{ jenkins_jobs }}"
+  notify: restart jenkins
+
