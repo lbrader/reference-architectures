@@ -32,6 +32,7 @@ import adal
 import re
 import pickle
 import time
+from github import Github
 from azure.keyvault import KeyVaultId
 from azure.keyvault import KeyVaultClient
 from azure.graphrbac import GraphRbacManagementClient
@@ -201,6 +202,26 @@ class Context(object):
                                         logs = "Unable to get secret tokens , {}".format(e)
                                         self.logger.error(logs)
                                         raise RuntimeError(logs)
+
+                                if dc == "jenkins":
+                                    secret_name_list = ["GITHUBTOKEN", "SMTPPASSWORD"]
+                                    for secret_name in secret_name_list:
+                                        output_secret = client_kv.get_secret(vault_uri, secret_name, secret_version='')
+                                        try:
+                                            if secret_name == "GITHUBTOKEN":
+                                                azure_srvp_credential["GITHUB_TOKEN"] = output_secret.value
+                                            elif secret_name == "SMTPPASSWORD":
+                                                azure_srvp_credential["SMTP_PASSWORD"] = output_secret.value
+                                            else:
+                                                self.logger.error(
+                                                    "No keys found for {}".format(secret_name))
+                                                sys.exit(1)
+                                        except Exception as e:
+                                            logs = "Unable to get secret tokens , {}".format(e)
+                                            self.logger.error(logs)
+                                            raise RuntimeError(logs)
+
+
                                 pickle.dump(azure_srvp_credential, open(token_filename, "wb"))
 
                         azure_credential = pickle.load(open(current_token_filename, "rb"))
@@ -209,10 +230,11 @@ class Context(object):
                         self.tenant_id = azure_credential['AZURE_TENANT_ID']
                         self.subscription_id = azure_credential['AZURE_SUBSCRIPTION_ID']
 
-                        # os.environ['AZURE_CLIENT_ID'] = self.client_id
-                        # os.environ['AZURE_CLIENT_SECRET'] = self.client_secret
-                        # os.environ['AZURE_TENANT_ID'] = self.tenant_id
-                        # os.environ['AZURE_SUBSCRIPTION_ID'] = self.subscription_id
+                        if 'GITHUB_TOKEN' in azure_credential:
+                            self.github_token = azure_credential['GITHUB_TOKEN']
+
+                        if 'SMTP_PASSWORD' in azure_credential:
+                            self.smtp_password = azure_credential['SMTP_PASSWORD']
 
                         self.credentials = ServicePrincipalCredentials(
                             client_id=self.client_id,
@@ -287,6 +309,93 @@ class Context(object):
         else:
             self.logger.info("Using location: {0}".format(self.location))
 
+    def _get_github_token(self):
+        """
+        Gets github token input from user, if its valid proceeds further else stop here
+        :return:
+        """
+        try:
+            while True:
+                try:
+                    github_token = input("Please enter your GitHuB Token: ")
+                except ValueError:
+                    self.logger.error("Sorry, I didn't understand that.")
+                    continue
+
+                if not github_token:
+                    self.logger.error("Sorry, your response is not valid.")
+                    continue
+                try:
+                    self.logger.warning("Validating GitHub token.")
+                    g = Github(github_token)
+                    org = g.get_organization(self.cluster_config['GIT_HUB_ORG_ID'])
+                    org.get_repos()
+                    self.github_token = github_token
+                    break
+                except Exception as err:
+                    self.logger.error("GitHub token is invalid.")
+                    self.logger.error("Exception: {0}".format(err))
+                    continue
+
+            repo_name="test-joara-init"
+            repo_exist=False
+            for gitrepo in org.get_repos(repo_name):
+                if gitrepo.name == repo_name:
+                    repo_exist = True
+
+            if not repo_exist:
+                repo = org.create_repo(repo_name)
+                time.sleep(60)
+                org.get_repo(repo_name).create_hook("jenkins", {"jenkins_hook_url": "http://test/github-webhook/"})
+                org.get_repo(repo_name).delete()
+                self.logger.info("GitHub token is valid.")
+        except Exception as err:
+            self.logger.error("Exception GitHub Token: {0}".format(err))
+
+    def _check_smtp(self):
+        """
+        Get Email SMTP password from user
+        :return:
+        """
+        try:
+            _RETRY_TIMES = 3
+            for l in range(0, _RETRY_TIMES):
+                try:
+                    smtp_password = input("Please enter your SMTP password: ")
+                except ValueError:
+                    self.logger.error("Sorry, I didn't understand that.")
+                    continue
+
+                if not smtp_password:
+                    self.logger.error("Sorry, your response is not valid.")
+                    continue
+                try:
+                    import smtplib
+                    self.logger.warning("Validating SMTP details.")
+                    server = smtplib.SMTP(self.cluster_config['JENKINS_EMAIL_SMTP_HOST'],
+                                          self.cluster_config['JENKINS_EMAIL_SMTP_PORT'])
+                    server.login(self.cluster_config['JENKINS_EMAIL_SMTP_USER'], smtp_password)
+                    msg = "Hello!-test-joara"
+                    server.sendmail(self.cluster_config['JENKINS_ADMIN_EMAIL'],self.cluster_config['NOTIFICATION_EMAIL'], msg)
+                    self.smtp_password = smtp_password
+                    self.logger.info("SMTP details are valid.")
+                    break
+                except Exception as err:
+                    if l < _RETRY_TIMES - 1:
+                        self.logger.error("SMTP details are invalid. Please check your SMTP details in clusters.ini and your entered password")
+                        self.logger.error("Exception SMTP: {0}".format(err))
+                        self.logger.warning('Invalid smtp details, retrying smtp: %s/%s', l + 1, _RETRY_TIMES)
+                        continue
+                    else:
+                        self.logger.error("SMTP details are invalid.")
+                        self.logger.error("Exception SMTP: {0}".format(err))
+                        self.logger.warning("##### Please try updating SMTP details manually from jenkins UI ##### ")
+                        self.smtp_password = "notvalid"
+                        break
+        except Exception as err:
+            self.logger.error("Exception SMTP details: {0}".format(err))
+
+
     def configure_azure(self):
         """
         Core to configure azure with creation of service principal, key vault and role assignment - works only for owner with administrative privileges
@@ -296,6 +405,12 @@ class Context(object):
         try:
             self.register_providers()
             self.check_location()
+            self._get_github_token()
+            self._check_smtp()
+            if not self.github_token:
+                self.logger.error("GitHub Token: {0} is invalid".format(self.github_token))
+                sys.exit(1)
+
             credkv, subscription_id, _ = self.profile.get_login_credentials(resource='https://vault.azure.net')
             credgm, subscription_id, _ = self.profile.get_login_credentials(resource='https://graph.windows.net')
             client_kv = KeyVaultClient(credkv)
@@ -377,6 +492,17 @@ class Context(object):
                 self.logger.info("Key vault secret creation started for datacenter: {0}".format(dc))
 
                 try:
+                    if dc == "jenkins":
+                        # Create a secret
+                        secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'GITHUBTOKEN',
+                                                             self.github_token)
+                        secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
+
+                        # Create a secret
+                        secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'SMTPPASSWORD',
+                                                             self.smtp_password)
+                        secret_id = KeyVaultId.parse_secret_id(secret_bundle.id)
+
                     # Create a secret
                     secret_bundle = client_kv.set_secret(vault.properties.vault_uri, 'AZURECLIENTID',
                                                          json_srvp["appId"])
@@ -523,7 +649,7 @@ class Context(object):
                 ## Git configuration
                 self.attrs['github_credentials_id'] = self.cluster_config['JENKINS_GITHUB_CREDENTIALS_ID']
                 self.attrs['github_username'] = self.cluster_config['GIT_HUB_USER_NAME']
-                self.attrs['github_token'] = self.cluster_config['GIT_HUB_TOKEN']
+                self.attrs['github_token'] = self.github_token
                 self.attrs['git_org_id'] = self.cluster_config['GIT_HUB_ORG_ID']
 
                 self.regionmap = {
@@ -557,12 +683,12 @@ class Context(object):
                 self.attrs['resource_group'] = "{}-jenkins".format(self.resource_group_prefix)
 
                 ## Email Notification settings
-                self.attrs['default_suffix'] = self.cluster_config['EMAIL_DEFAULT_SUFFIX']
-                self.attrs['reply_to'] = self.cluster_config['EMAIL_REPLY_TO']
-                self.attrs['smtp_host'] = self.cluster_config['EMAIL_SMTP_HOST']
-                self.attrs['smtp_password'] = self.cluster_config['EMAIL_SMTP_PASSWORD']
-                self.attrs['smtp_port'] = self.cluster_config['EMAIL_SMTP_PORT']
-                self.attrs['smtp_user'] = self.cluster_config['EMAIL_SMTP_USER']
+                self.attrs['default_suffix'] = "@azure.com"
+                self.attrs['reply_to'] = ""
+                self.attrs['smtp_host'] = self.cluster_config['JENKINS_EMAIL_SMTP_HOST']
+                self.attrs['smtp_password'] = self.smtp_password
+                self.attrs['smtp_port'] = self.cluster_config['JENKINS_EMAIL_SMTP_PORT']
+                self.attrs['smtp_user'] = self.cluster_config['JENKINS_EMAIL_SMTP_USER']
 
                 ## Jenkins Location
                 self.attrs['jenkins_admin_email'] = self.cluster_config['JENKINS_ADMIN_EMAIL']
@@ -919,6 +1045,7 @@ class Context(object):
 
         self.__dict__.update({
             'jenkins_host': jenkins_host,
+            'git_hub_token': self.github_token,
             'image': args.image,
             'repo': repo_name})
 

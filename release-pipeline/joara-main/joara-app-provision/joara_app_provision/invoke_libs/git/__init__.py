@@ -25,7 +25,7 @@ class GitHubApi(object):
         :param kwargs: param reponame, github details
         """
         self.logger = logging.get_logger(self.__class__.__name__)
-        self.token = kwargs['cluster_config']['GIT_HUB_TOKEN']
+        self.token = kwargs['git_hub_token']
         self.orgid = kwargs['cluster_config']['GIT_HUB_ORG_ID']
         self.username = kwargs['cluster_config']['GIT_HUB_USER_NAME']
         self.jenkinshost = kwargs['jenkins_host']

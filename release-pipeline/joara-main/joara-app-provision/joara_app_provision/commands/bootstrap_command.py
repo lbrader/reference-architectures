@@ -56,7 +56,7 @@ def bootstrap_subcommand(args):
         if args.datacenter == "all" and args.group == "all":
            ### `all` provisions everything (acs,acr,storage) for all datacenter
             gitargs = Attributes(
-                {'group': "git", "image": "azure-vote", "repo": "", "task": "all", "datacenter": "dev"})
+                {'group': "git", "image": "azure-vote", "repo": "", "task": "all", "datacenter": "jenkins"})
             logger.info(
                 "################### Configuring git repo for azure-vote app, resource: {} ###################".format(
                     gitargs.group))
