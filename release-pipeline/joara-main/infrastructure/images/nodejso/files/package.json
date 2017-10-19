@@ -1,0 +1,10 @@
+{
+  "name": "nodejs-docker-example",
+  "scripts": {
+    "test": "mocha ./test.js"
+  },
+  "devDependencies": {
+    "mocha": "^2.4.5",
+    "express": "4.14.0"
+  }
+}

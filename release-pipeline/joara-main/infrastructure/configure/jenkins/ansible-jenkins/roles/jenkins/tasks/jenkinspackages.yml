@@ -1,0 +1,59 @@
+- name: Download MiniConda
+  get_url:
+    url=https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    dest=/tmp/miniconda.sh
+    mode=0755
+
+- name: Changing perm of "/tmp/miniconda.sh", adding "+x"
+  file: dest=/tmp/miniconda.sh mode=a+x
+
+- name: Remove Miniconda
+  shell: rm -rf /var/lib/jenkins/conda
+  args:
+    executable: /bin/bash
+
+- name: Install Miniconda
+  command:
+    '/bin/bash /tmp/miniconda.sh -f -b -p /var/lib/jenkins/conda'
+  become_user: jenkins
+#
+#- name: Adding bashrc
+#  shell: touch ~/.bashrc
+
+- name: Adding bashrc
+  file: path=~/.bashrc  state=touch
+
+- name: Adding profile
+  file: path=~/.profile  state=touch
+
+- name: Adding the path in the Profile files
+  lineinfile: dest=~/.bashrc line='export PATH=/var/lib/jenkins/conda/bin:$PATH' insertafter='EOF' state=present
+
+- name: Adding the path in the Profile files
+  lineinfile: dest=~/.bashrc line='export PATH=/var/lib/jenkins/conda/bin:$PATH' insertafter='EOF' state=present
+
+- name: Adding the path in the Profile files
+  lineinfile: dest=~/.bashrc line='export PATH=/var/lib/jenkins/conda/bin:$PATH' insertafter='EOF' state=present
+
+- name: Source the bash_profile file
+  shell: source ~/.bashrc
+  args:
+    executable: /bin/bash
+
+- name: Adding the path in the Profile files
+  lineinfile: dest=~/.profile line='export PATH=/var/lib/jenkins/conda/bin:$PATH' insertafter='EOF' state=present
+
+- name: Adding the path in the Profile files
+  lineinfile: dest=~/.profile line='export PATH=/var/lib/jenkins/conda/bin:$PATH' insertafter='EOF' state=present
+
+- name: Adding the path in the Profile files
+  lineinfile: dest=~/.profile line='export PATH=/var/lib/jenkins/conda/bin:$PATH' insertafter='EOF' state=present
+
+- name: Source the bash_profile file
+  shell: source ~/.profile
+  args:
+    executable: /bin/bash
+
+- name: Create virtual env
+  shell: conda create -n vjoaraapp3 python
+  ignore_errors: true

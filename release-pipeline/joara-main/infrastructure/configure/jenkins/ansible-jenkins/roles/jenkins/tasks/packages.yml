@@ -7,6 +7,11 @@
 - name: Changing perm of "/tmp/miniconda.sh", adding "+x"
   file: dest=/tmp/miniconda.sh mode=a+x
 
+- name: Remove Miniconda
+  shell: rm -rf /opt/conda
+  args:
+    executable: /bin/bash
+
 - name: Install Miniconda
   command:
     '/bin/bash /tmp/miniconda.sh -f -b -p /opt/conda'

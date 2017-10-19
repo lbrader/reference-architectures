@@ -1,40 +1,48 @@
 ---
 
+- include: setup.yml
+  when: pre_install == "false"
+
 - include: packages.yml
   when: pre_install == "false"
+
+- include: jenkinspackages.yml
+  when: pre_install == "false"
+  become_user: jenkins
 
 - include: docker.yml
   when: pre_install == "false"
 
-- include: setup.yml
+- include: ssh.yml
   when: pre_install == "false"
 
-#- include: ssh.yml
-#  when: pre_install == "false"
-#
 - name: Update security of jenkins
   template: src=config-pre.xml dest={{ jenkins_directory }}/config.xml owner=jenkins group=jenkins mode=755
 
 - include: restart.yml
   when: pre_install == "false"
 
+- include: credentials_scripts.yml
+  when: pre_install == "false"
+
+
 - include: plugins.yml
   when: pre_install == "false"
 
 - name: Update security of jenkins
-  template: src=config-post.xml dest={{ jenkins_directory }}//config.xml owner=jenkins group=jenkins mode=755
+  template: src=config-post.xml dest={{ jenkins_directory }}/config.xml owner=jenkins group=jenkins mode=755
+
+- name: Update jenkins location
+  template: src=jenkins.model.JenkinsLocationConfiguration.xml dest={{ jenkins_directory }}/jenkins.model.JenkinsLocationConfiguration.xml owner=jenkins group=jenkins mode=755
 
 - include: restart.yml
   when: pre_install == "false"
-#
+
 - include: jobs.yml
   when: pre_install == "false"
 
 - include: restart.yml
   when: pre_install == "false"
-##
-##- include: config.yml
-##  when: pre_install == "false"
-#
+
 - include: pre_install.yml
   when: pre_install == "true"

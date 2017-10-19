@@ -31,3 +31,12 @@
     state: "{{ 'latest' if update_docker_package else 'present' }}"
     update_cache: "{{ update_docker_package }}"
     cache_valid_time: "{{ docker_apt_cache_valid_time }}"
+
+- name: Add jenkins user to root
+  shell: "sudo gpasswd -a jenkins docker  "
+  register: jenkins_unlock
+
+- name: Restart Docker
+  service:
+    name: docker
+    state: restarted

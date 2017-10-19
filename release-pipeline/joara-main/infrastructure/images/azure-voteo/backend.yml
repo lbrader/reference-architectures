@@ -1,0 +1,8 @@
+image: redis
+name: azure-voteo-back
+port: 6379
+count: 1
+type: backend
+version: 3.2
+app_docker_registry: docker.io
+user: library

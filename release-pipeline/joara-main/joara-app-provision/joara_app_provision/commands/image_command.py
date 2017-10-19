@@ -1,13 +1,18 @@
 from __future__ import absolute_import, print_function, division
-from ..python_libs.utils import find_joara_app_main
+from ..python_libs.utils import find_app_main
 from ..commands import from_base
 import os
 from ..log import logging
 import platform
 import sys
-logger = logging.get_joara_logger(__name__)
+logger = logging.get_logger(__name__)
 
 def image_add_subcommand(parser):
+    """
+    Registers image command
+    :param parser: argparse parser
+    :return:
+    """
     subcommand = parser.add_parser('image')
 
     subcommand.add_argument(
@@ -21,7 +26,9 @@ def image_add_subcommand(parser):
             'scale',
             'patch',
             'delete',
-            'get'
+            'get',
+            'rollback',
+            'getservice'
         ],
         help="Which action to be performed on the image "
     )
@@ -45,7 +52,7 @@ def image_add_subcommand(parser):
         '--version',
         type=str,
         nargs='?',
-        help="How many replicas to scale")
+        help="Version to deploy")
 
     subcommand.add_argument('--verbose', required=False, action='count', default=True)
 
@@ -53,6 +60,7 @@ def image_add_subcommand(parser):
 
 
 def image_subcommand(args):
+    ### Action on image
     for image in args.images:
         module = os.path.join('infrastructure', 'images', 'run')
         if args.task in ["build", "push", "all"]:

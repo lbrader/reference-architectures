@@ -25,6 +25,12 @@ def is_valid_ssh_rsa_public_key(openssh_pubkey):
 
 
 def generate_ssh_keys(private_key_filepath, public_key_filepath):
+    """
+    Generates ssh keys
+    :param private_key_filepath: path of ppk file
+    :param public_key_filepath:  path of pub file
+    :return: ssh public key
+    """
     import paramiko
 
     ssh_dir, _ = os.path.split(private_key_filepath)

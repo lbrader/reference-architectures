@@ -1,0 +1,4 @@
+image: nodejso
+port: 3000
+cpu: 512m
+limitscpu: 512m

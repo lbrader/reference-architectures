@@ -7,6 +7,7 @@ exec 2>&1
 set -xe
 
 sudo apt install -y python-pip unzip
+sudo pip install --upgrade pip
 sudo pip install --upgrade ansible
 cd /tmp
 rm -rf ansible-jenkins

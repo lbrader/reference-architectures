@@ -8,6 +8,25 @@
   retries: 5
   delay: 10
 #
+#- name: Copy sudoers file for safety
+#  command: cp -f /etc/sudoers /etc/sudoers.tmp
+#
+#- name: Create sudoers file backup
+#  command: cp -f /etc/sudoers /etc/sudoers.bak
+#
+#- name: Create admins group
+#  group: name=admins system=yes state=present
+#
+#- name: make sure we can sudo as admin group
+#  lineinfile: dest=/etc/sudoers.tmp state=present regexp='^%admin' line='jenkins ALL=(ALL) NOPASSWD: ALL'
+#
+#- name: also make sure ssh-agent works via sudo
+#  lineinfile: dest=/etc/sudoers.tmp state=present regexp='^Defaults env_keep\+\=SSH_AUTH_SOCK' line='Defaults env_keep+=SSH_AUTH_SOCK'
+#
+#- name: Final sudoers file check
+#  shell: visudo -q -c -f /etc/sudoers.tmp && cp -f /etc/sudoers.tmp /etc/sudoers
+
+#
 #- name: Copy environment variables file
 #  copy:
 #    src="{{config_path}}/envVars.properties"

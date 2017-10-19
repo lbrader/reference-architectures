@@ -3,10 +3,10 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "registryName": {
-            "value": "joaraacr{{ datacenter }}"
+            "value": "{{ resourcegroup }}acr{{ datacenter }}"
         },
         "registryLocation": {
-            "value": "eastus"
+            "value": "{{ location }}"
         },
         "registrySku": {
             "value": "Managed_Standard"

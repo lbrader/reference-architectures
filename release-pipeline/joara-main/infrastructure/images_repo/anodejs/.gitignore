@@ -1,0 +1,6 @@
+.vagrant
+*.vdi
+*.egg*
+*.idea
+*.idea*
+*.pyc
