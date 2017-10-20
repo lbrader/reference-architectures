@@ -190,7 +190,7 @@ def configure_git(args):
 
 def configure_azure(args):
     """
-    Executes creation of azure service principle, role assignment and key vault. Works only with Owner and Administrator privilege users
+    Executes creation of azure service principal, role assignment and key vault. Works only with Owner and Administrator privilege users
     :param args: command line arguments passed to the script
     :return:
     """

@@ -52,10 +52,11 @@ def bootstrap_subcommand(args):
         kube_datacenters = ['dev', 'test', 'prod']
         all_datacenters = ['dev', 'test', 'prod', 'jenkins']
         groups = ['acr', 'acs', 'storage']
+        shutil.rmtree(os.path.join(os.path.expanduser("~"), ".joara"), ignore_errors=True)
         if args.datacenter == "all" and args.group == "all":
            ### `all` provisions everything (acs,acr,storage) for all datacenter
             gitargs = Attributes(
-                {'group': "git", "image": "azure-vote", "repo": "", "task": "all", "datacenter": "dev"})
+                {'group': "git", "image": "azure-vote", "repo": "", "task": "all", "datacenter": "jenkins"})
             logger.info(
                 "################### Configuring git repo for azure-vote app, resource: {} ###################".format(
                     gitargs.group))
@@ -101,10 +102,10 @@ def bootstrap_subcommand(args):
                     from_base.configure_jenkins(args)
                     logger.info("################### Completed pre-configuring jenkins ###################")
                     logger.warn(
-                        "################### Please configure jenkins in web ui by following the steps present in the document, on completion please type yes or no ###################")
+                        "################### Please configure jenkins in web ui by following the steps present in the document, on completion please enter 'yes' to confirm ###################")
 
                     try:
-                        response = input("Have you configured jenkins ? Please type yes or no to continue:")
+                        response = input("Have you configured jenkins ? Please enter 'yes' to confirm:")
                     except SyntaxError:
                         pass
 
@@ -114,7 +115,7 @@ def bootstrap_subcommand(args):
                         logger.info("################### All steps completed ###################")
                     else:
                         logger.warn(
-                            "################### Your response is {}, so jenkins configuration not proceeded. ###################".format(
+                            "################### Your response is {}, so jenkins configuration not proceeded. You can also run jenskinsconfigure command separately ###################".format(
                                 response))
                         sys.exit(1)
         ### `all` provisions everything (acs,acr,storage) for only selected datacenter datacenter
